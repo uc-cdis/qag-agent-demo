@@ -67,8 +67,8 @@ We demonstrate two ways of utilizing agentic QAG:
 
 ### Everything Locally-Served
 
-This example requires a high-capacity GPU (at minimum an NVIDIA A100 80GB) to serve the reasoning model `gpt-oss-120b`. Less capable open-weight models may also be used but results do improve with stronger reasoning and multistep planning capabilities. For this method, we use the following tools:
-* `openai/gpt-oss-120b` as our reasoning model
+This example requires a high-capacity GPU (at minimum an NVIDIA A100 80GB) to serve the reasoning model `Nemotron-3-Nano-30B-A3B`. Less capable open-weight models may also be used but results do improve with stronger reasoning and multistep planning capabilities. For this method, we use the following tools:
+* `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16` as our reasoning model
 * `vLLM` to serves the LLM
 * `FastMCP` to create our MCP server
 * `pydantic-ai` to create our agent and to provide an AG-UI server
@@ -90,6 +90,9 @@ cd ..
 
 # install mcp server in editable mode
 pip install -e .
+
+# download the custom reasoning parser for Nemotron-3-Nano
+wget https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16/resolve/main/nano_v3_reasoning_parser.py
 ```
 
 #### Run Servers
@@ -98,7 +101,7 @@ Once you've setup and activated your environment, start the ollama, MCP, and age
 ```bash
 # start the vLLM server, change the GPU index as needed
 # you can also use docker to serve vllm though there are some FIPS issues if you need to care about those
-CUDA_VISIBLE_DEVICES=0 vllm serve openai/gpt-oss-120b --port 8000 --enable-auto-tool-choice --tool-call-parser openai
+CUDA_VISIBLE_DEVICES=0 vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16   --served-model-name model   --max-num-seqs 8   --tensor-parallel-size 1   --max-model-len 262144   --port 8010   --trust-remote-code   --enable-auto-tool-choice   --tool-call-parser qwen3_coder   --reasoning-parser-plugin nano_v3_reasoning_parser.py   --reasoning-parser nano_v3
 
 # start the MCP server (in a separate terminal window)
 python -m qag_mcp.server -t streamable-http -p 8001
@@ -132,7 +135,7 @@ If you are running the servers on a remote host, you can use ssh tunneling to fo
 
 #### Local LLM Agent Limitations
 
-Even using `gpt-oss-120b`, open-weight models tend to still be behind frontier models (like those that back the Claudes, ChatGPTs, and Geminis). Of course, the local agent could switch backends but we tend to want to use a local LLM with a local agent. One salient example of this difference in capability that came up in testing was letting the model do math directly in natural language. It was okay, but it would sometimes prematurely terminate. Our solution was to just add basic arithmetic tools directly to the agent which seems to have resolved the math computation limitation.
+Open-weight models tend to still be behind frontier models (like those that back the Claudes, ChatGPTs, and Geminis). Of course, the local agent could switch backends but we tend to want to use a local LLM with a local agent. One salient example of this difference in capability that came up in testing was letting the model do math directly in natural language. It was okay, but it would sometimes prematurely terminate. Our solution was to just add basic arithmetic tools directly to the agent which seems to have resolved the math computation limitation. Though not quantitative, we have found `Nemotron-3-Nano` to perform well in powering our agentic framework.
 
 ### Connecting QAG MCP to Claude Desktop
 

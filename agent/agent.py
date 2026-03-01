@@ -1,82 +1,10 @@
 import argparse
-import os
-from contextlib import asynccontextmanager
 
 import uvicorn
 from pydantic_ai import Agent, ConcurrencyLimit
 from pydantic_ai.mcp import MCPServerStreamableHTTP
-from pydantic_ai.messages import (
-    PartDeltaEvent,
-    PartStartEvent,
-    ThinkingPart,
-    ThinkingPartDelta,
-)
-from pydantic_ai.models.openai import OpenAIResponsesModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-
-
-def patch_model_reasoning(model: OpenAIResponsesModel):
-    """
-    patch a model's response stream to handle reasoning content
-    model is patched in-place
-
-    alternate inference providers (like vLLM) support returning raw thinking tokens
-    this GH issue requested supporting the reasoning response format: https://github.com/pydantic/pydantic-ai/issues/3191
-    the final discussion and implementation ended up moving the tokens to "raw_content":
-    https://github.com/pydantic/pydantic-ai/pull/3559
-    also see this documentation: https://github.com/pydantic/pydantic-ai/blob/94dc8f888bf5ff20478c43d737e76d5756cb3f1d/docs/thinking.md?plain=1#L41-L42
-    this patch surfaces that content as the reasoning summary
-    it was easier to collect the reasoning stream than forward them streamed
-    """
-    _original_request_stream = model.request_stream
-
-    @asynccontextmanager
-    async def _patched_request_stream(*args, **kwargs):
-        async with _original_request_stream(*args, **kwargs) as stream:
-            original_iterator = stream._get_event_iterator
-
-            async def _fixed_iterator():
-                thinking_part_indices: set[int] = set()
-
-                async for event in original_iterator():
-                    if isinstance(event, PartStartEvent) and isinstance(
-                        event.part, ThinkingPart
-                    ):
-                        thinking_part_indices.add(event.index)
-                        yield event
-
-                    elif isinstance(event, PartDeltaEvent) and isinstance(
-                        event.delta, ThinkingPartDelta
-                    ):
-                        pass
-
-                    else:
-                        for index in thinking_part_indices:
-                            part = stream._parts_manager._parts[index]
-                            if isinstance(part, ThinkingPart):
-                                if part.provider_details is None:
-                                    print(
-                                        f"ThinkingPart.provider_details is None: {part}"
-                                    )
-                                    continue
-                                raw = part.provider_details.get("raw_content", "")
-                                full_content = (
-                                    "".join(raw) if isinstance(raw, list) else raw
-                                )
-                                if full_content:
-                                    yield PartDeltaEvent(
-                                        index=index,
-                                        delta=ThinkingPartDelta(
-                                            content_delta=full_content
-                                        ),
-                                    )
-                        thinking_part_indices.clear()
-                        yield event
-
-            stream._get_event_iterator = _fixed_iterator
-            yield stream
-
-    model.request_stream = _patched_request_stream
 
 
 def make_agent(
@@ -87,11 +15,14 @@ def make_agent(
     max_queued: int = 8,
 ) -> Agent:
     mcp_server = MCPServerStreamableHTTP(mcp_url)
-    model = OpenAIResponsesModel(
-        model_name="openai/gpt-oss-120b",
+    model = OpenAIChatModel(
+        model_name="model",
         provider=OpenAIProvider(base_url=llm_url, api_key="NONE"),
     )
-    patch_model_reasoning(model)
+
+    # NOTE: if you want to switch to the newer responses API, you may need to do some patching of the response stream for the pydantic AI model client implementation
+    # see this prior commit as a reference: https://github.com/StevenSong/qag-agent-demo/blob/79ff198623fd2fc0025e383c323cd526a75684a0/agent/agent.py
+
     agent = Agent(
         model,
         toolsets=[mcp_server],
@@ -100,6 +31,7 @@ def make_agent(
             "tools to query information about genetic mutations using the Genomic Data Commons (GDC). "
             "Use the tools to answer questions. Multiple chained tool calls may be required to answer a question. "
             "If a user query is ambiguous, stop and ask them to clarify before trying to find the answer. "
+            "Pay particular attention to the instructions provided by the tool providers, as they may further clarify what ambiguities exist. "
             "Also math is hard for LLMs to do in natural language. If you need to do arithmetic, just use the tools."
         ),
         max_concurrency=ConcurrencyLimit(

@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from textwrap import dedent
 
 from cachetools import TTLCache
 from mcp.server.fastmcp import FastMCP
@@ -408,15 +409,41 @@ if __name__ == "__main__":
 
     mcp = FastMCP(
         name="GDC API MCP Server",
-        instructions=(
-            "Use the tools of the GDC MCP server to answer questions about genomic variant statistics from data in the GDC. "
-            "Currently, we support querying cases by simple somatic mutation, copy number variant, and microsatellite instability. "
-            "Do not assume that 'mutation' simply means somatic mutation, even if given a specific gene (it's also valid to query for CNV mutations in a gene). "
-            "Since somatic mutations and copy number variation can both be considered mutations but this may be ambiguous, "
-            "so if a user asks for 'mutations' without further specification, you should always stop and clarify with the user. "
-            "You should never make the assumption about what the user means. "
-            "Queried case sets are cached server-side. Case set intersection and union is additionally provided server side. "
-            "Case counts can be returned for any retrieved or computed case sets."
+        instructions=dedent(
+            """
+            Use the tools of the GDC MCP server to answer questions about genomic variant statistics from data in the NCI's Genomic Data Commons.
+
+            ## Terminology & Disambiguation
+
+            Because these tools are meant to answer highly specific biological questions, we need to be clear on terminology.
+            You must clarify any ambiguous terms before proceeding in order to provide accurate answers.
+            **Strictly follow these rules:**
+            - Do not assume that 'mutation' means simple somatic mutations (SSMs).
+            - Do not assume that 'somatic mutation' means SSM.
+            - You should never assume what the user means by 'mutation' or 'somatic mutation'.
+            - If the user's meaning of 'mutation' or 'somatic mutation' is unclear, you must stop and ask the user to specify if they mean SSM, copy number variation (CNV), or both.
+            - Even if the user asks for 'mutations in gene X', this is still ambiguous as the user could mean CNV in that gene and you must stop and clarify what the user means.
+
+            ## Architecture & Mental Model
+
+            These tools query and operate over case sets.
+            The raw case sets are never returned to the client, instead case sets are cached on the server and referenced by a unique identifier returned by the tools.
+
+            ## Tool Categories & Workflow
+
+            The tools are broadly grouped into three categories: querying case sets, set operations over case sets, and returning information about case sets.
+            The general workflow is as follows:
+            1. use the query tools to select case sets
+            2. use the set manipulation tools to combine case sets
+            3. use the information tools to get details about the curated case sets
+
+            Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by {cohort_tool_type}.
+            Case counts can be returned for any retrieved or computed case sets.
+            """.format(
+                cohort_tool_type=(
+                    "cohort description" if args.use_cohort_copilot else "GDC project"
+                )
+            )
         ),
         port=args.port,
     )
