@@ -98,34 +98,34 @@ Once you've setup and activated your environment, start the ollama, MCP, and age
 ```bash
 # start the vLLM server, change the GPU index as needed
 # you can also use docker to serve vllm though there are some FIPS issues if you need to care about those
-CUDA_VISIBLE_DEVICES=0 vllm serve openai/gpt-oss-120b   --served-model-name model   --enable-auto-tool-choice   --tool-call-parser openai
+CUDA_VISIBLE_DEVICES=0 vllm serve openai/gpt-oss-120b --enable-auto-tool-choice --tool-call-parser openai --port 8080
 
 # start the MCP server (in a separate terminal window)
-python -m qag_mcp.server -t streamable-http -p 8001
+python -m qag_mcp.server -t streamable-http -p 8011
 
 # start the agent AG-UI server (in a separate terminal window)
-python agent/agent.py -p 8003 --mcp-url "http://localhost:8001/mcp" --llm-url "http://localhost:8000/v1"
+python agent/agent.py --mcp-url "http://localhost:8011/mcp" --llm-url "http://localhost:8080/v1" --model-name "openai/gpt-oss-120b" -p 8010
 
 # start the UI app server (in a separate terminal window)
 cd frontend
-AGENT_URL="http://localhost:8003" npm run dev -- -p 8002
+AGENT_URL="http://localhost:8010" npm run dev -- -p 8000
 
 # alternatively, you can build and serve the frontend app
 cd frontend
 npm run build
-AGENT_URL="http://localhost:8003" npm run start -- -p 8002
+AGENT_URL="http://localhost:8010" npm run start -- -p 8000
 
 # if you need to serve the frontend app behind a reverse proxy that does not strip the app prefix, you'll need to set the root path via NEXT_PUBLIC_BASE_PATH
-AGENT_URL="http://localhost:8003/" npm run dev -- -p 8002
+NEXT_PUBLIC_BASE_PATH=/prefix AGENT_URL="http://localhost:8010" npm run dev -- -p 8000
 
 # note that if you're building the app, the base path must be set at both build and start time
 NEXT_PUBLIC_BASE_PATH=/prefix npm run build
-NEXT_PUBLIC_BASE_PATH=/prefix AGENT_URL="http://localhost:8003" npm run start -- -p 8002
+NEXT_PUBLIC_BASE_PATH=/prefix AGENT_URL="http://localhost:8010" npm run start -- -p 8000
 
 # I'm not a software engineer so the frontend app was mostly vibe coded and based off this example:
 # https://github.com/CopilotKit/with-pydantic-ai
 
-# go to http://localhost:8002 in a browser and query away
+# go to http://localhost:8000 in a browser and query away
 ```
 
 If you are running the servers on a remote host, you can use ssh tunneling to forward the remote port of the app server to your local so you can access the UI on your local.

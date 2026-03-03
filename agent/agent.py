@@ -9,6 +9,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 
 def make_agent(
+    model_name: str,
     mcp_url: str,
     llm_url: str,
     retries: int = 1,
@@ -17,7 +18,7 @@ def make_agent(
 ) -> Agent:
     mcp_server = MCPServerStreamableHTTP(mcp_url)
     model = OpenAIChatModel(
-        model_name="model",
+        model_name=model_name,
         provider=OpenAIProvider(base_url=llm_url, api_key="NONE"),
     )
 
@@ -82,6 +83,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--llm-url", required=True)
+    parser.add_argument("--model-name", required=True)
     parser.add_argument("--use-dev-ui", action="store_true", default=False)
     args = parser.parse_args()
 
@@ -94,7 +96,11 @@ if __name__ == "__main__":
             f"Cannot use both --query ({args.query}) and --port ({args.port}), setting port implies serving the agent UI while setting query implies running the agent over provided input"
         )
 
-    agent = make_agent(mcp_url=args.mcp_url, llm_url=args.llm_url)
+    agent = make_agent(
+        model_name=args.model_name,
+        mcp_url=args.mcp_url,
+        llm_url=args.llm_url,
+    )
 
     if args.query is None:
         if args.use_dev_ui:
