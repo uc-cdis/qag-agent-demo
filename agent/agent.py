@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import uvicorn
 from pydantic_ai import Agent, ConcurrencyLimit
@@ -81,6 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--llm-url", required=True)
+    parser.add_argument("--use-dev-ui", action="store_true", default=False)
     args = parser.parse_args()
 
     # p: None, q: None - run as server w/ default port
@@ -95,14 +97,17 @@ if __name__ == "__main__":
     agent = make_agent(mcp_url=args.mcp_url, llm_url=args.llm_url)
 
     if args.query is None:
-        # serve the agent with a UI - this is just a dev UI! cannot be mounted under a root_path
-        # see: https://github.com/pydantic/pydantic-ai/issues/4156
-        # rel_dir = os.path.dirname(__file__)
-        # app = agent.to_web()
-
-        # start a server for the agent, exposing an AG-UI interface
-        # requires a separate app server (CopilotKit) that talks to the agent via AG-UI
-        app = agent.to_ag_ui()
+        if args.use_dev_ui:
+            # serve the agent with the built in dev UI
+            # this app cannot be mounted under a base path as the frontend logic hard codes some paths
+            # see: https://github.com/pydantic/pydantic-ai/issues/4156
+            # however, maybe you could instead use a subdomain?
+            rel_dir = os.path.dirname(__file__)
+            app = agent.to_web(html_source=os.path.join(rel_dir, "index.html"))
+        else:
+            # start a server for the agent, exposing an AG-UI interface
+            # requires a separate app server (CopilotKit) that talks to the agent via AG-UI
+            app = agent.to_ag_ui()
         port = 8000  # default
         if args.port is not None:
             port = args.port

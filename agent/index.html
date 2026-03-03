@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GDC QAG</title>
+    <script type="module" crossorigin src="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-Dtnbv4I1.js"></script>
+    <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-BtNS_N-J.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // get rid of pydantic banner
+      const observer = new MutationObserver(() => {
+        const h1 = document.querySelector("h1");
+        if (h1) {
+          h1.textContent = "🧬 GDC QAG 🔬";
+          observer.disconnect(); // stop watching once done
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+  </body>
+</html>
