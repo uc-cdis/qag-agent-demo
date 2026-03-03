@@ -1,4 +1,5 @@
 import inspect
+import json
 import sys
 from typing import Any
 
@@ -7,12 +8,12 @@ import requests
 from ._defines import GDC_API, TOOL_CACHE_ID_TEMPLATES, CaseSetId
 
 
-def get_tool_case_set_id_template() -> str:
+def get_tool_id_template() -> str:
     frame = inspect.currentframe().f_back
     return TOOL_CACHE_ID_TEMPLATES[frame.f_code.co_name]
 
 
-def suggest_tool_from_case_set_id(case_set_id: CaseSetId) -> str:
+def suggest_tool_from_id(case_set_id: CaseSetId) -> str:
     match = match_template_and_params(case_set_id, TOOL_CACHE_ID_TEMPLATES)
     if match is not None:
         tool_name, tool_params = match
@@ -65,9 +66,17 @@ def extract_top_level_params(identifier: str) -> list[str]:
     return params
 
 
+def truncate(x, max_len=100):
+    x = str(x)
+    if len(x) > max_len:
+        x = x[:max_len]
+    return x
+
+
 def gdc_query_all(
     endpoint: str,
     filters: dict,
+    cohort_filter: dict | str | None = None,
     fields: list[str] | None = None,
     page_size: int = 1000,
 ) -> list[dict[str, Any]]:
@@ -75,9 +84,29 @@ def gdc_query_all(
     all_hits = []
     offset = 0
 
+    print(
+        f"querying endpoint: {endpoint} with filters: {truncate(filters)} and cohort_filter: {json.loads(cohort_filter) if isinstance(cohort_filter, str) else cohort_filter}",
+        file=sys.stderr,
+    )
+
+    all_filters = filters
+    if cohort_filter:  # not None or empty string
+        if isinstance(cohort_filter, str):
+            cohort_filter = json.loads(cohort_filter)
+        if filters:
+            all_filters = {
+                "op": "and",
+                "content": [
+                    cohort_filter,
+                    filters,
+                ],
+            }
+        else:
+            all_filters = cohort_filter
+
     while True:
         payload = {
-            "filters": filters,
+            "filters": all_filters,
             "from": offset,
             "size": page_size,
         }

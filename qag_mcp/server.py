@@ -13,39 +13,58 @@ from ._defines import (
     CaseSetId,
     CNVChange,
     CohortDescription,
+    CohortFilterID,
+    DataType,
     Gene,
     MSIStatus,
     Project,
 )
-from ._utils import (
-    gdc_query_all,
-    get_tool_case_set_id_template,
-    suggest_tool_from_case_set_id,
-)
+from ._utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
-case_cache = TTLCache(maxsize=1000, ttl=3600)
+cache = TTLCache(maxsize=1000, ttl=3600)
 
 
 def get_simple_somatic_mutation_occurrences(
     gene: Gene,
     aa_change: AAChange = None,
+    cohort_filter: CohortFilterID = None,
 ) -> CaseSetId:
     """
     A tool to query the GDC API for cases with simple somatic mutations (SSMs).
-    This tool searches for SSMs within a given gene, and optionally with a specified amino acid change.
+    This tool searches for SSMs within a given gene, optionally resulting in an amino acid (AA) change, optionally within a specific cohort.
+    It is an error to use this tool without a specific gene.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
-        f"get_simple_somatic_mutation_occurrences(gene={repr(gene)}, aa_change={repr(aa_change)})",
+        f"get_simple_somatic_mutation_occurrences(gene={repr(gene)}, aa_change={repr(aa_change)}, cohort_filter={repr(cohort_filter)})",
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(gene=gene, aa_change=aa_change)
+    if gene is None:
+        raise ToolError(
+            f"Cannot retrieve simple somatic mutation cases without a specific gene"
+        )
+
+    cache_id = get_tool_id_template().format(
+        gene=gene, aa_change=aa_change, cohort_filter=cohort_filter
+    )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
+
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
 
     # first get SSMs for the given query parameters, either by gene & AA change or just gene
     if aa_change is not None:
@@ -67,48 +86,74 @@ def get_simple_somatic_mutation_occurrences(
     hits = gdc_query_all(
         endpoint="ssms",
         filters=_filters,
+        cohort_filter=_cohort_filter,
         fields=["gene_aa_change", "ssm_id"],
     )
-    ssm_ids = [hit["ssm_id"] for hit in hits]
 
     # then get cases matching those SSMs
+    ssm_ids = [hit["ssm_id"] for hit in hits]
+    ssm_id_filter = {
+        "op": "in",
+        "content": {
+            "field": "ssm.ssm_id",
+            "value": ssm_ids,
+        },
+    }
     hits = gdc_query_all(
         endpoint="ssm_occurrences",
-        filters={
-            "op": "in",
-            "content": {
-                "field": "ssm.ssm_id",
-                "value": ssm_ids,
-            },
-        },
+        filters=ssm_id_filter,
+        cohort_filter=_cohort_filter,
         fields=["ssm.ssm_id", "case.submitter_id", "case.case_id"],
     )
     case_ids = set([hit["case"]["case_id"] for hit in hits])
-    case_cache[cache_id] = list(case_ids)
+    cache[cache_id] = list(case_ids)
 
     return cache_id
 
 
 def get_copy_number_variant_occurrences(
-    gene: Gene,
+    gene: Gene = None,
     cnv_change: CNVChange = None,
+    cohort_filter: CohortFilterID = None,
 ) -> CaseSetId:
     """
     A tool to query the GDC API for cases with copy number variations (CNVs).
-    This tool searches for CNVs within a given gene, and optionally with a specific change type.
+    This tool searches for CNVs within a given gene, optionally for a specific change type, optionally within a specific cohort.
+    If only the gene is specified, this tool retrieves all cases with any change type for the given gene.
+    If only the change type is specified, this tool retrieves all cases with the given change type in any gene.
+    It is an error to use this tool without at least one of gene or change type.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
-        f"get_copy_number_variant_occurrences(gene={repr(gene)}, cnv_change={repr(cnv_change)})",
+        f"get_copy_number_variant_occurrences(gene={repr(gene)}, cnv_change={repr(cnv_change)}, cohort_filter={repr(cohort_filter)})",
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(gene=gene, cnv_change=cnv_change)
+    if gene is None and cnv_change is None:
+        raise ToolError(
+            f"Cannot retrieve copy number variation cases without either a specific gene, a change type, or both"
+        )
+
+    cache_id = get_tool_id_template().format(
+        gene=gene, cnv_change=cnv_change, cohort_filter=cohort_filter
+    )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
+
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
 
     # apparently `heterozygous deletion` change type is `loss` so remap it
     # keep the enum for the LLM to help it disambiguate the options
@@ -116,15 +161,17 @@ def get_copy_number_variant_occurrences(
     if cnv_change == "heterozygous deletion":
         cnv_change = "loss"  # type: ignore
 
-    ops = [
-        {
-            "op": "in",
-            "content": {
-                "field": "cnv.consequence.gene.symbol",
-                "value": [gene],
+    ops = []
+    if gene is not None:
+        ops.append(
+            {
+                "op": "in",
+                "content": {
+                    "field": "cnv.consequence.gene.symbol",
+                    "value": [gene],
+                },
             },
-        },
-    ]
+        )
     if cnv_change is not None:
         ops.append(
             {
@@ -142,6 +189,7 @@ def get_copy_number_variant_occurrences(
             "op": "and",
             "content": ops,
         },
+        cohort_filter=_cohort_filter,
         fields=[
             "cnv.cnv_change",
             "cnv.cnv_change_5_category",
@@ -151,30 +199,45 @@ def get_copy_number_variant_occurrences(
         ],
     )
     case_ids = set([hit["case"]["case_id"] for hit in hits])
-    case_cache[cache_id] = list(case_ids)
+    cache[cache_id] = list(case_ids)
 
     return cache_id
 
 
 def get_microsatellite_instability_occurrences(
-    msi_status: MSIStatus = "msi",
+    msi_status: MSIStatus,
+    cohort_filter: CohortFilterID = None,
 ) -> CaseSetId:
     """
     A tool to query the GDC API for cases with microsatellite instability (MSI).
-    This tool searches for either MSI or MSS status, by default MSI.
+    This tool searches for either MSI or MSS status, optionally within a specific cohort.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
-        f"get_microsatellite_instability_occurrences(msi_status={repr(msi_status)})",
+        f"get_microsatellite_instability_occurrences(msi_status={repr(msi_status)}, cohort_filter={repr(cohort_filter)})",
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(msi_status=msi_status)
+    cache_id = get_tool_id_template().format(
+        msi_status=msi_status, cohort_filter=cohort_filter
+    )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
+
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
 
     # MSI is stored at the file level, so we need to query the files and aggregate back up to the cases
     hits = gdc_query_all(
@@ -182,10 +245,17 @@ def get_microsatellite_instability_occurrences(
         filters={
             "op": "and",
             "content": [
-                {"op": "in", "content": {"field": "msi_status", "value": [msi_status]}},
+                {
+                    "op": "in",
+                    "content": {
+                        "field": "msi_status",
+                        "value": [msi_status],
+                    },
+                },
                 {"op": "in", "content": {"field": "data_format", "value": ["BAM"]}},
             ],
         },
+        cohort_filter=_cohort_filter,
         fields=[
             "msi_status",
             "msi_score",
@@ -198,41 +268,148 @@ def get_microsatellite_instability_occurrences(
     for hit in hits:
         for case in hit.get("cases", []):
             case_ids.add(case["case_id"])
-    case_cache[cache_id] = list(case_ids)
+    cache[cache_id] = list(case_ids)
 
     return cache_id
 
 
-def get_cases_by_project(project: Project) -> CaseSetId:
+def get_cases_with_available_data(
+    data_type: DataType, cohort_filter: CohortFilterID
+) -> CaseSetId:
     """
-    A tool to query the GDC API for cases of a project, for example 'TCGA-BRCA'.
+    A tool to retrieve cases with available data for a given genomic variant data type, for example 'ssm'.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
-        f"get_cases_by_project(project={repr(project)})",
+        f"get_cases_with_available_data(data_type={repr(data_type)}, cohort_filter={repr(cohort_filter)})",
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(project=project)
+    cache_id = get_tool_id_template().format(
+        data_type=data_type, cohort_filter=cohort_filter
+    )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
 
-    hits = gdc_query_all(
-        endpoint="cases",
-        filters={
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
+
+    if data_type in ["ssm", "cnv"]:
+        hits = gdc_query_all(
+            endpoint="cases",
+            filters={
+                "op": "in",
+                "content": {
+                    "field": "files.data_type",
+                    "value": [
+                        (
+                            "Aggregated Somatic Mutation"
+                            if data_type == "ssm"
+                            else "Allele-specific Copy Number Segment"
+                        )
+                    ],
+                },
+            },
+            cohort_filter=_cohort_filter,
+            fields=["project.project_id", "submitter_id"],
+        )
+        case_ids = set([hit["id"] for hit in hits])
+        cache[cache_id] = list(case_ids)
+    elif data_type in ["msi"]:
+        _msi_ids = get_microsatellite_instability_occurrences("msi", cohort_filter)
+        _mss_ids = get_microsatellite_instability_occurrences("mss", cohort_filter)
+        _ms_any_ids = compute_case_union(_msi_ids, _mss_ids)
+        cache[cache_id] = cache[_ms_any_ids]
+    else:
+        raise ToolError(
+            f"Unknown how to find available cases for given data type: {data_type}"
+        )
+
+    return cache_id
+
+
+def get_cohort_filter_by_project(project: Project) -> CohortFilterID:
+    """
+    A tool to construct a GDC cohort filter by project, for example 'TCGA-BRCA'.
+    The resulting JSON filter is cached server side and can be referenced using the unique identifier returned by this tool.
+    """
+    print(
+        f"get_cohort_filter_by_project(project={repr(project)})",
+        file=sys.stderr,
+    )
+
+    cache_id = get_tool_id_template().format(project=project)
+
+    # if we've already created this filter, refresh it in the cache and shortcut return
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
+        return cache_id
+
+    filter_str = json.dumps(
+        {
             "op": "in",
             "content": {
                 "field": "cases.project.project_id",
                 "value": [project],
             },
         },
+        indent=4,
+    )
+
+    cache[cache_id] = filter_str
+
+    return cache_id
+
+
+def get_cases_by_cohort_filter(cohort_filter: CohortFilterID) -> CaseSetId:
+    """
+    A tool to query the GDC API for cases matching a given cohort filter.
+    The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
+    """
+    print(
+        f"get_cases_by_filter(cohort_filter={repr(cohort_filter)})",
+        file=sys.stderr,
+    )
+
+    cache_id = get_tool_id_template().format(cohort_filter=cohort_filter)
+
+    # if we've already done this retrieval, refresh it in the cache and shortcut return
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
+        return cache_id
+
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
+
+    hits = gdc_query_all(
+        endpoint="cases",
+        filters={},
+        cohort_filter=_cohort_filter,
         fields=["project.project_id", "submitter_id"],
     )
     case_ids = set([hit["id"] for hit in hits])
-    case_cache[cache_id] = list(case_ids)
+    cache[cache_id] = list(case_ids)
 
     return cache_id
 
@@ -240,46 +417,34 @@ def get_cases_by_project(project: Project) -> CaseSetId:
 def make_cohort_copilot_tool(generate_filter):
     # The method to generate_filter should be modular so that improvements to cohort copilot
     # can be reflected simply by using a revised implementation of generate_filter
-
-    def get_cases_by_cohort_description(
+    def get_cohort_filter_by_cohort_description(
         cohort_description: CohortDescription,
-    ) -> CaseSetId:
+    ) -> CohortFilterID:
         """
-        A tool to query the GDC API for cases of a described cohort, for example 'cases from the TCGA-BRCA project' or 'cases of non-smoking patients'.
-        The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
+        A tool to construct a GDC cohort filter of a described cohort, for example 'cases from the TCGA-BRCA project' or 'cases of non-smoking patients'.
+        The resulting JSON filter is cached server side and can be referenced using the unique identifier returned by this tool.
         While this tool can take natural language inputs, it is best used with very simple, single attribute descriptions.
         Do NOT provide gene filters to this tool.
         """
         print(
-            f"get_cases_by_cohort_description(cohort_description={repr(cohort_description)})",
+            f"get_cohort_filter_by_cohort_description(cohort_description={repr(cohort_description)})",
             file=sys.stderr,
         )
 
-        cache_id = get_tool_case_set_id_template().format(
-            cohort_description=cohort_description
-        )
+        cache_id = get_tool_id_template().format(cohort_description=cohort_description)
 
-        # if we've already done this retrieval, refresh it in the cache and shortcut return
-        if cache_id in case_cache:
-            case_cache[cache_id] = case_cache[cache_id]
+        # if we've already created this filter, refresh it in the cache and shortcut return
+        if cache_id in cache:
+            cache[cache_id] = cache[cache_id]
             return cache_id
 
         filter_str = generate_filter(cohort_description)
 
-        # NOTE: there's not a great way in the current tool design to surface the cohort filter to the user, for now just print it
-        print(f"Generated Cohort Filter:\n{filter_str}", file=sys.stderr)
-
-        hits = gdc_query_all(
-            endpoint="cases",
-            filters=json.loads(filter_str),
-            fields=["submitter_id"],
-        )
-        case_ids = set([hit["id"] for hit in hits])
-        case_cache[cache_id] = list(case_ids)
+        cache[cache_id] = filter_str
 
         return cache_id
 
-    return get_cases_by_cohort_description
+    return get_cohort_filter_by_cohort_description
 
 
 def compute_case_intersection(
@@ -295,29 +460,29 @@ def compute_case_intersection(
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(
+    cache_id = get_tool_id_template().format(
         case_set_id_A=case_set_id_A, case_set_id_B=case_set_id_B
     )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
 
     for case_set_id in [case_set_id_A, case_set_id_B]:
-        if case_set_id not in case_cache:
+        if case_set_id not in cache:
             raise ToolError(
                 f"Case set {case_set_id} was not found in the server side cache, perhaps it expired? "
-                f"Try requerying for those cases to cache it again. {suggest_tool_from_case_set_id(case_set_id)}"
+                f"Try requerying for those cases to cache it again. {suggest_tool_from_id(case_set_id)}"
             )
         # refresh the subsets since we're using them
-        case_cache[case_set_id] = case_cache[case_set_id]
+        cache[case_set_id] = cache[case_set_id]
 
-    cases_A = set(case_cache[case_set_id_A])
-    cases_B = set(case_cache[case_set_id_B])
+    cases_A = set(cache[case_set_id_A])
+    cases_B = set(cache[case_set_id_B])
 
     A_and_B = cases_A & cases_B
-    case_cache[cache_id] = list(A_and_B)
+    cache[cache_id] = list(A_and_B)
 
     return cache_id
 
@@ -335,29 +500,29 @@ def compute_case_union(
         file=sys.stderr,
     )
 
-    cache_id = get_tool_case_set_id_template().format(
+    cache_id = get_tool_id_template().format(
         case_set_id_A=case_set_id_A, case_set_id_B=case_set_id_B
     )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
-    if cache_id in case_cache:
-        case_cache[cache_id] = case_cache[cache_id]
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
         return cache_id
 
     for case_set_id in [case_set_id_A, case_set_id_B]:
-        if case_set_id not in case_cache:
+        if case_set_id not in cache:
             raise ToolError(
                 f"Case set {case_set_id} was not found in the server side cache, perhaps it expired? "
-                f"Try requerying for those cases to cache it again. {suggest_tool_from_case_set_id(case_set_id)}"
+                f"Try requerying for those cases to cache it again. {suggest_tool_from_id(case_set_id)}"
             )
         # refresh the subsets since we're using them
-        case_cache[case_set_id] = case_cache[case_set_id]
+        cache[case_set_id] = cache[case_set_id]
 
-    cases_A = set(case_cache[case_set_id_A])
-    cases_B = set(case_cache[case_set_id_B])
+    cases_A = set(cache[case_set_id_A])
+    cases_B = set(cache[case_set_id_B])
 
     A_and_B = cases_A | cases_B
-    case_cache[cache_id] = list(A_and_B)
+    cache[cache_id] = list(A_and_B)
 
     return cache_id
 
@@ -374,16 +539,16 @@ def get_case_set_size(
         file=sys.stderr,
     )
 
-    if case_set_id not in case_cache:
+    if case_set_id not in cache:
         raise ToolError(
             f"Case set {case_set_id} was not found in the server side cache, perhaps it expired? "
-            f"Try requerying for those cases to cache it again. {suggest_tool_from_case_set_id(case_set_id)}"
+            f"Try requerying for those cases to cache it again. {suggest_tool_from_id(case_set_id)}"
         )
 
     # refresh the subsets since we're using them
-    case_cache[case_set_id] = case_cache[case_set_id]
+    cache[case_set_id] = cache[case_set_id]
 
-    return len(case_cache[case_set_id])
+    return len(cache[case_set_id])
 
 
 if __name__ == "__main__":
@@ -418,10 +583,10 @@ if __name__ == "__main__":
             Because these tools are meant to answer highly specific biological questions, we need to be clear on terminology.
             You must clarify any ambiguous terms before proceeding in order to provide accurate answers.
             **Strictly follow these rules:**
-            - Do not assume that 'mutation' means simple somatic mutations (SSMs).
-            - Do not assume that 'somatic mutation' means SSM.
+            - Do NOT assume that 'mutation' means simple somatic mutations.
+            - Do NOT assume that 'somatic mutation' means simple somatic mutations.
             - You should never assume what the user means by 'mutation' or 'somatic mutation'.
-            - If the user's meaning of 'mutation' or 'somatic mutation' is unclear, you must stop and ask the user to specify if they mean SSM, copy number variation (CNV), or both.
+            - If the user's meaning of 'mutation' or 'somatic mutation' is unclear, you must stop and ask the user to specify if they mean simple somatic mutation (SSM), copy number variation (CNV), or both.
             - Even if the user asks for 'mutations in gene X', this is still ambiguous as the user could mean CNV in that gene and you must stop and clarify what the user means.
 
             ## Architecture & Mental Model
@@ -437,8 +602,11 @@ if __name__ == "__main__":
             2. use the set manipulation tools to combine case sets
             3. use the information tools to get details about the curated case sets
 
-            Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by {cohort_tool_type}.
-            Case counts can be returned for any retrieved or computed case sets.
+            ## General Guidance
+
+            - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by {cohort_tool_type}.
+            - Case counts can be returned for any retrieved or computed case sets.
+            - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'.
             """.format(
                 cohort_tool_type=(
                     "cohort description" if args.use_cohort_copilot else "GDC project"
@@ -455,12 +623,16 @@ if __name__ == "__main__":
         # NOTE: with cohort copilot v1, importing will load a model onto GPU so defer until needed
         from .cohort_copilot import generate_filter
 
-        get_cases_by_cohort_description = make_cohort_copilot_tool(generate_filter)
-        mcp.add_tool(get_cases_by_cohort_description)
+        get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
+            generate_filter
+        )
+        mcp.add_tool(get_cohort_filter_by_cohort_description)
     else:
-        mcp.add_tool(get_cases_by_project)
+        mcp.add_tool(get_cohort_filter_by_project)
+    mcp.add_tool(get_cases_by_cohort_filter)
     mcp.add_tool(compute_case_intersection)
     mcp.add_tool(compute_case_union)
     mcp.add_tool(get_case_set_size)
+    mcp.add_tool(get_cases_with_available_data)
 
     mcp.run(transport=args.transport)
