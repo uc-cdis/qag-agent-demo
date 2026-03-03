@@ -104,7 +104,7 @@ CUDA_VISIBLE_DEVICES=0 vllm serve openai/gpt-oss-120b --enable-auto-tool-choice 
 python -m qag_mcp.server -t streamable-http -p 8011
 
 # start the agent AG-UI server (in a separate terminal window)
-python agent/agent.py --mcp-url "http://localhost:8011/mcp" --llm-url "http://localhost:8080/v1" --model-name "openai/gpt-oss-120b" -p 8010
+python agent/agent.py --mcp-url "http://localhost:8011/mcp" --openai-api-url "http://localhost:8080/v1" --openai-model-name "openai/gpt-oss-120b" -p 8010
 
 # start the UI app server (in a separate terminal window)
 cd frontend
