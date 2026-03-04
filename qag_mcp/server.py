@@ -3,6 +3,7 @@ import json
 import sys
 from textwrap import dedent
 
+import requests
 from cachetools import TTLCache
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
@@ -551,6 +552,23 @@ def get_case_set_size(
     return len(cache[case_set_id])
 
 
+def generate_filter_v2(query: str) -> str:
+    """
+    Converts a free text description of a cancer cohort into a GDC structured cohort filter.
+
+    Args:
+        query (str): The free text cohort description
+
+    Returns:
+        str: JSON structured GDC cohort filter
+    """
+
+    resp = requests.post("http://localhost:8100/invoke", json={"query": query})
+    cohort_filter = json.dumps(resp.json()["filter"], indent=4)
+
+    return cohort_filter
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -621,10 +639,11 @@ if __name__ == "__main__":
     mcp.add_tool(get_microsatellite_instability_occurrences)
     if args.use_cohort_copilot:
         # NOTE: with cohort copilot v1, importing will load a model onto GPU so defer until needed
-        from .cohort_copilot import generate_filter
+        # from .cohort_copilot import generate_filter
 
         get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
-            generate_filter
+            # generate_filter,
+            generate_filter_v2,
         )
         mcp.add_tool(get_cohort_filter_by_cohort_description)
     else:

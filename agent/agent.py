@@ -74,7 +74,7 @@ if __name__ == "__main__":
     parser.add_argument("-q", "--query")
     parser.add_argument("-p", "--port", type=int)
     parser.add_argument("--mcp-url", required=True)
-    parser.add_argument("--use-dev-ui", action="store_true", default=False)
+    parser.add_argument("--use-dev-ui")
     parser.add_argument("--openai-model-name")
     parser.add_argument("--openai-model-alias")
     parser.add_argument("--openai-api-url")
@@ -130,14 +130,17 @@ if __name__ == "__main__":
         models[alias] = temp
 
     if args.query is None:
-        if args.use_dev_ui:
+        if args.use_dev_ui is not None:
             # serve the agent with the built in dev UI
             # this app cannot be mounted under a base path as the frontend logic hard codes some paths
             # see: https://github.com/pydantic/pydantic-ai/issues/4156
             # however, maybe you could instead use a subdomain?
             rel_dir = os.path.dirname(__file__)
             app = agent.to_web(
-                models=models, html_source=os.path.join(rel_dir, "index.html")
+                models=models,
+                html_source=os.path.join(
+                    rel_dir, args.use_dev_ui
+                ),  # use_dev_ui is the name of the static HTML page to serve
             )
         else:
             if len(models) > 1:
