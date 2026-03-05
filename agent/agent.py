@@ -2,12 +2,27 @@ import argparse
 import os
 
 import uvicorn
-from pydantic_ai import Agent, ConcurrencyLimit
+from pydantic_ai import Agent, ConcurrencyLimit, RunContext
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.tools import ToolDefinition
+
+
+async def sync_cohort_copilot_tool_backend(
+    ctx: RunContext[None], tool_defs: list[ToolDefinition]
+) -> list[ToolDefinition] | None:
+    # NOTE beware this is very very hardcoded logic that isn't even written in this codebase!
+    # it's determined at runtime! hah! have fun debugging whoever is reading this >:)
+    if ctx.model.system == "openai":
+        # for the demo, openai is the local backend, so exclude the copilot v2 tool that uses claude backend
+        exclude = "get_cohort_filter_by_cohort_description"
+    else:
+        # use claude backend, exclude the copilot v2 tool that uses local backend
+        exclude = "generate_cohort_filter_using_cohort_description"
+    return [tool_def for tool_def in tool_defs if tool_def.name != exclude]
 
 
 def make_agent(
@@ -32,6 +47,7 @@ def make_agent(
             max_running=max_running, max_queued=max_queued
         ),
         retries=retries,
+        prepare_tools=sync_cohort_copilot_tool_backend,
     )
 
     @agent.tool_plain

@@ -22,7 +22,7 @@ from ._defines import (
 )
 from ._utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
-cache = TTLCache(maxsize=1000, ttl=3600)
+cache = TTLCache(maxsize=1000, ttl=10800)
 
 
 def get_simple_somatic_mutation_occurrences(
@@ -279,6 +279,8 @@ def get_cases_with_available_data(
 ) -> CaseSetId:
     """
     A tool to retrieve cases with available data for a given genomic variant data type, for example 'ssm'.
+    This tool should generally be used with a cohort filter as data availability without a specific cohort can be slow to compute.
+    Some user queries may necessarily require computing data availability without a specific cohort, though this should be avoided if possible.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
@@ -552,21 +554,27 @@ def get_case_set_size(
     return len(cache[case_set_id])
 
 
-def generate_filter_v2(query: str) -> str:
-    """
-    Converts a free text description of a cancer cohort into a GDC structured cohort filter.
+def make_generate_filter_v2(backend):
+    def generate_filter_v2(query: str) -> str:
+        """
+        Converts a free text description of a cancer cohort into a GDC structured cohort filter.
 
-    Args:
-        query (str): The free text cohort description
+        Args:
+            query (str): The free text cohort description
 
-    Returns:
-        str: JSON structured GDC cohort filter
-    """
+        Returns:
+            str: JSON structured GDC cohort filter
+        """
 
-    resp = requests.post("http://localhost:8100/invoke", json={"query": query})
-    cohort_filter = json.dumps(resp.json()["filter"], indent=4)
+        resp = requests.post(
+            "http://localhost:8100/invoke",
+            json={"query": query, "backend": backend},
+        )
+        cohort_filter = json.dumps(resp.json()["filter"], indent=4)
 
-    return cohort_filter
+        return cohort_filter
+
+    return generate_filter_v2
 
 
 if __name__ == "__main__":
@@ -641,11 +649,30 @@ if __name__ == "__main__":
         # NOTE: with cohort copilot v1, importing will load a model onto GPU so defer until needed
         # from .cohort_copilot import generate_filter
 
+        # NOTE: with cohort copilot v2, we can serve with different backends
+        # however, when integrating with this QAG MCP server, the agent backend using this QAG MCP
+        # can be different from the backend driving copilot v2
+        # NOTE: for the sake of the demo, we'd like the backends to be unified so there's
+        # some logic on the agent to switch which tool is available, depending on the agent's backend
         get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
-            # generate_filter,
-            generate_filter_v2,
+            # cohort copilot v2 with claude backend
+            make_generate_filter_v2("anthropic"),
         )
-        mcp.add_tool(get_cohort_filter_by_cohort_description)
+        mcp.add_tool(
+            get_cohort_filter_by_cohort_description,
+            name="get_cohort_filter_by_cohort_description",
+        )
+
+        # NOTE we have a hacky way to separate out the nearly identical versions of copilot v2
+        # while preserving the natural language naming scheme
+        get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
+            # cohort copilot v2 with local backend
+            make_generate_filter_v2("openai"),
+        )
+        mcp.add_tool(
+            get_cohort_filter_by_cohort_description,
+            name="generate_cohort_filter_using_cohort_description",
+        )
     else:
         mcp.add_tool(get_cohort_filter_by_project)
     mcp.add_tool(get_cases_by_cohort_filter)
