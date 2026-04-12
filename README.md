@@ -106,6 +106,10 @@ python -m qag_mcp.server -t streamable-http -p 8011
 # start the agent AG-UI server (in a separate terminal window)
 python agent/agent.py --mcp-url "http://localhost:8011/mcp" --openai-api-url "http://localhost:8080/v1" --openai-model-name "openai/gpt-oss-120b" -p 8010
 
+python agent/agent.py --mcp-url "http://localhost:8011/mcp" --openai-api-url "http://localhost:8080/v1" --openai-model-name "openai/gpt-oss-120b" --openai-model-alias "(On-Prem) GPT OSS 120B" --google-model-name "gemini-3.1-pro-preview" --google-model-alias "Gemini 3.1 Pro" -p 8000 --use-dev-ui "qag.html"
+
+python agent/agent.py --mcp-url "http://localhost:8011/mcp" --openai-api-url "http://localhost:8080/v1" --openai-model-name "openai/gpt-oss-120b" --openai-model-alias "(On-Prem) GPT OSS 120B" --google-model-name "gemini-3.1-pro-preview" --google-model-alias "Gemini 3.1 Pro" -p 8002 --use-dev-ui "qag-copilot.html"
+
 # start the UI app server (in a separate terminal window)
 cd frontend
 AGENT_URL="http://localhost:8010" npm run dev -- -p 8000
