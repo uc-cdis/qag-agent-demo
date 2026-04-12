@@ -217,3 +217,4 @@ temp/
 node_modules
 .langgraph_api
 claude.txt
+.vscode

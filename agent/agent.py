@@ -5,8 +5,10 @@ import uvicorn
 from pydantic_ai import Agent, ConcurrencyLimit, RunContext
 from pydantic_ai.mcp import MCPServerStreamableHTTP
 from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
+from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import ToolDefinition
 
@@ -99,6 +101,10 @@ if __name__ == "__main__":
     parser.add_argument("--anthropic-model-alias")
     parser.add_argument("--anthropic-api-url")
     parser.add_argument("--anthropic-api-key-file")
+    parser.add_argument("--google-model-name")
+    parser.add_argument("--google-model-alias")
+    parser.add_argument("--google-api-url")
+    parser.add_argument("--google-api-key-file")
     args = parser.parse_args()
 
     # p: None, q: None - run as server w/ default port
@@ -140,6 +146,21 @@ if __name__ == "__main__":
             model_name=args.anthropic_model_name,
             provider=AnthropicProvider(
                 base_url=args.anthropic_api_url,  # can be None
+                api_key=api_key,  # can be None
+            ),
+        )
+        models[alias] = temp
+
+    if args.google_model_name is not None:
+        alias = args.google_model_alias or args.google_model_name
+        api_key = os.environ["GEMINI_API_KEY"]
+        if args.google_api_key_file is not None:
+            with open(args.google_api_key_file, "r") as f:
+                api_key = f.read().strip()
+        temp = GoogleModel(
+            model_name=args.google_model_name,
+            provider=GoogleProvider(
+                vertexai=False,  # can be None
                 api_key=api_key,  # can be None
             ),
         )
