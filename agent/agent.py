@@ -1,5 +1,6 @@
 import argparse
 import os
+from typing import List
 
 import uvicorn
 from pydantic_ai import Agent, ConcurrencyLimit, RunContext
@@ -29,7 +30,7 @@ async def sync_cohort_copilot_tool_backend(
 
 def make_agent(
     mcp_url: str,
-    retries: int = 1,
+    retries: int = 2,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:

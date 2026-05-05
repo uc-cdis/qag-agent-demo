@@ -1,26 +1,47 @@
 import argparse
 import json
 import sys
+from io import StringIO
 from textwrap import dedent
+from typing import Dict, List, Optional
 
+import numpy as np
+import pandas as pd
 import requests
 from cachetools import TTLCache
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
 from ._defines import (
+    TOOL_CACHE_ID_TEMPLATES,
     AAChange,
     CaseCount,
     CaseSetId,
     CNVChange,
     CohortDescription,
     CohortFilterID,
+    DataFrameDescribeOutput,
     DataType,
+    DiseaseType,
+    ExpressionSetId,
     Gene,
     MSIStatus,
+    PrimarySite,
     Project,
+    Sex,
+    SmokingStatus,
+    TSVUnit,
 )
-from ._utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
+from ._utils import (
+    AverageGeneExpressionResult,
+    GeneExpressionAverage,
+    GeneExpressionVariable,
+    VariableGeneExpressionResult,
+    gdc_query_all,
+    get_ensembl_gene_ids,
+    get_tool_id_template,
+    suggest_tool_from_id,
+)
 
 cache = TTLCache(maxsize=1000, ttl=10800)
 
@@ -274,22 +295,260 @@ def get_microsatellite_instability_occurrences(
     return cache_id
 
 
-def get_cases_with_available_data(
-    data_type: DataType, cohort_filter: CohortFilterID
+def get_gene_expression_occurances(
+    genes: List[Gene],
+    cohort_filter: CohortFilterID,
 ) -> CaseSetId:
     """
-    A tool to retrieve cases with available data for a given genomic variant data type, for example 'ssm'.
+    A tool to query the GDC API for cases with gene expression data.
+    This tool searches for availability of gene expression data for a gene or set of genes, optionally within a specific cohort.
+    The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
+    """
+    print(
+        f"get_gene_expression_occurances(genes={repr(genes)}, cohort_filter={repr(cohort_filter)})",
+        file=sys.stderr,
+    )
+
+    cache_id = get_tool_id_template().format(genes=genes, cohort_filter=cohort_filter)
+
+    # if we've already done this retrieval, refresh it in the cache and shortcut return
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
+        return cache_id
+
+    # check cohort filters is in cache
+    _cohort_filter = None
+    if cohort_filter is not None:
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        _cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = _cohort_filter
+
+    # first convert the gene symbol to ENSEMBL id and then retrieve the available case set and cache
+    gene_ids = get_ensembl_gene_ids(genes)
+    cases_cache_id = get_cases_by_cohort_filter(cohort_filter)
+    cases = cache.get(cases_cache_id)
+    hits = requests.post(
+        url="https://api.gdc.cancer.gov/gene_expression/availability",
+        json={
+            "case_ids": cases,
+            "gene_ids": gene_ids,
+        },
+    )
+
+    case_ids = set()
+    for case in hits.json().get("cases", []).get("details", []):
+        case_ids.add(case["case_id"])
+    cache[cache_id] = list(case_ids)
+
+    return cache_id
+
+
+def get_gene_expression_values(
+    cases: CaseSetId,
+    genes: List[Gene],
+    tsv_unit: TSVUnit,
+) -> ExpressionSetId:
+    """
+    A tool to query the GDC API for gene expression values given a gene or set of genes.
+    The resulting expression set is cached server side and can be referenced using identifier returned by this tool
+    """
+    if genes is None:
+        raise ToolError(
+            f"Cannot retrieve cases without either a specific gene or genes"
+        )
+    print(
+        f"get_gene_expression_values(cases={repr(cases)}, genes={repr(genes)}, tsv_unit={repr(tsv_unit)})",
+        file=sys.stderr,
+    )
+
+    cache_id = get_tool_id_template().format(
+        cases=cases, genes=genes, tsv_unit=tsv_unit
+    )
+
+    # if we've already done this retrieval, refresh it in the cache and shortcut return
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
+        return cache_id
+
+    case_ids = cache.get(cases)
+
+    # Compute Raw Expression values
+    url = "https://api.gdc.cancer.gov/gene_expression/values"
+    headers = {
+        "accept": "text/tab-separated-values",
+        "Content-Type": "application/json",
+    }
+    gene_ids = get_ensembl_gene_ids(genes)
+    payload = {
+        "case_ids": case_ids,
+        "gene_ids": gene_ids,
+        "tsv_units": tsv_unit,
+        "format": "tsv",
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    cache[cache_id] = response.text
+
+    return cache_id
+
+
+def get_gene_expression_statistics(
+    expressions: ExpressionSetId,
+) -> Dict:
+    """
+    Computes basic gene expression statistics on a set of cases and set of genes.
+    """
+    print(
+        f"get_gene_expression_statistics(expressions={repr(expressions)})",
+        file=sys.stderr,
+    )
+
+    # extract the expression values and
+    expression_values = cache[expressions]
+    df = pd.read_csv(StringIO(expression_values), sep="\t")
+    df = df.set_index("gene_id")
+    summary = {}
+
+    for gene, row in df.iterrows():
+        values = pd.to_numeric(row, errors="coerce")
+
+        non_missing = values.dropna()
+
+        if len(non_missing) == 0:
+            summary[str(gene)] = {
+                "count": 0,
+                "missing": int(values.isna().sum()),
+                "mean": None,
+                "std": None,
+                "min": None,
+                "p25": None,
+                "median": None,
+                "p75": None,
+                "max": None,
+            }
+            continue
+
+        summary[str(gene)] = {
+            "count": int(non_missing.count()),
+            "missing": int(values.isna().sum()),
+            "mean": non_missing.mean(),
+            "std": non_missing.std(),
+            "min": non_missing.min(),
+            "p25": non_missing.quantile(0.25),
+            "median": non_missing.median(),
+            "p75": non_missing.quantile(0.75),
+            "max": non_missing.max(),
+        }
+
+    return summary
+
+
+def get_average_gene_expression(
+    cases: CaseSetId,
+    genes: List[Gene],
+    tsv_unit: TSVUnit,
+) -> AverageGeneExpressionResult:
+    """
+    A tool to query GDC API for gene expression values given a gene or set of genes and return basic statistics.
+    The result describes the gene expression statistics of the current case and gene set combinations.
+    """
+    if genes is None:
+        raise ToolError(
+            f"Cannot retrieve cases without either a specific gene, or genes"
+        )
+
+    case_ids = cache.get(cases)
+    # Compute Raw Expression values
+    url = "https://api.gdc.cancer.gov/gene_expression/values"
+    headers = {
+        "accept": "text/tab-separated-values",
+        "Content-Type": "application/json",
+    }
+    gene_ids = get_ensembl_gene_ids(genes)
+    payload = {
+        "case_ids": case_ids,
+        "gene_ids": gene_ids,
+        "tsv_units": tsv_unit,
+        "format": "tsv",
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    df = pd.read_csv(StringIO(response.text), sep="\t")
+    # print(df.head())
+    avg_gene_expr = df.set_index("gene_id").mean(axis=1)
+    result = []
+    for id, val in avg_gene_expr.items():
+        result.append(
+            GeneExpressionAverage(
+                gene_id=str(id),
+                avg_expression=val,
+            )
+        )
+
+    return AverageGeneExpressionResult(genes=result)
+
+
+def get_variable_gene_expression(
+    cases: CaseSetId,
+    genes: List[Gene],
+    selection_size: int = 1,
+) -> VariableGeneExpressionResult:
+    """
+    A tool to query GDC API for variable gene expression result given a gene or set of genes such as for 'most variably expressed gene in a certain cancer'
+    The result is the variable gene expression.
+    """
+    if genes is None:
+        raise ToolError(
+            f"Cannot retrieve cases without either a specific gene, or genes"
+        )
+
+    case_ids = cache.get(cases)
+    # Compute Raw Expression values
+    url = "https://api.gdc.cancer.gov/gene_expression/gene_selection"
+    headers = {"accept": "application/json", "Content-Type": "application/json"}
+    gene_ids = get_ensembl_gene_ids(genes)
+    payload = {
+        "case_ids": case_ids,
+        "gene_ids": gene_ids,
+        "selection_size": selection_size,
+    }
+    response = requests.post(url, headers=headers, json=payload)
+    print(response)
+    result = []
+    for item in response.json().get("gene_selection", []):
+        result.append(
+            GeneExpressionVariable(
+                gene_id=item.get("gene_id", ""),
+                symbol=item.get("symbol", ""),
+                log2_uqfpkm_median=item.get("log2_uqfpkm_median", ""),
+                log2_uqfpkm_stddev=item.get("log2_uqfpkm_stddev", ""),
+            )
+        )
+
+    return VariableGeneExpressionResult(selections=result)
+
+
+def get_cases_with_available_data(
+    data_type: DataType,
+    cohort_filter: CohortFilterID,
+    genes: Optional[List[Gene]],
+) -> CaseSetId:
+    """
+    A tool to retrieve cases with available data for a given genomic variant data type, for example 'ssm' or 'gene_expression'.
     This tool should generally be used with a cohort filter as data availability without a specific cohort can be slow to compute.
     Some user queries may necessarily require computing data availability without a specific cohort, though this should be avoided if possible.
     The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
-        f"get_cases_with_available_data(data_type={repr(data_type)}, cohort_filter={repr(cohort_filter)})",
+        f"get_cases_with_available_data(data_type={repr(data_type)}, cohort_filter={repr(cohort_filter)}, genes={repr(genes)})",
         file=sys.stderr,
     )
 
     cache_id = get_tool_id_template().format(
-        data_type=data_type, cohort_filter=cohort_filter
+        data_type=data_type, cohort_filter=cohort_filter, genes=genes
     )
 
     # if we've already done this retrieval, refresh it in the cache and shortcut return
@@ -335,6 +594,14 @@ def get_cases_with_available_data(
         _mss_ids = get_microsatellite_instability_occurrences("mss", cohort_filter)
         _ms_any_ids = compute_case_union(_msi_ids, _mss_ids)
         cache[cache_id] = cache[_ms_any_ids]
+    elif data_type in ["gene_expression"]:
+        if genes is not None:
+            _gene_expr_ids = get_gene_expression_occurances(genes, cohort_filter)
+            cache[cache_id] = cache[_gene_expr_ids]
+        else:
+            print(
+                f"Error, requires a gene or set of genes to compute gene expression occurances"
+            )
     else:
         raise ToolError(
             f"Unknown how to find available cases for given data type: {data_type}"
@@ -342,10 +609,9 @@ def get_cases_with_available_data(
 
     return cache_id
 
-
-def get_cohort_filter_by_project(project: Project) -> CohortFilterID:
+    # def get_cohort_filter_by_project(project: List[Project]) -> CohortFilterID:
     """
-    A tool to construct a GDC cohort filter by project, for example 'TCGA-BRCA'.
+    A tool to construct a GDC cohort filter by project or multiple projects, for example 'TCGA-BRCA'.
     The resulting JSON filter is cached server side and can be referenced using the unique identifier returned by this tool.
     """
     print(
@@ -365,7 +631,7 @@ def get_cohort_filter_by_project(project: Project) -> CohortFilterID:
             "op": "in",
             "content": {
                 "field": "cases.project.project_id",
-                "value": [project],
+                "value": project,
             },
         },
         indent=4,
@@ -373,6 +639,92 @@ def get_cohort_filter_by_project(project: Project) -> CohortFilterID:
 
     cache[cache_id] = filter_str
 
+    return cache_id
+
+
+def get_cohort_filter_by_project(
+    project: List[Project] = None,
+    primary_site: List[PrimarySite] = None,
+    disease_type: List[DiseaseType] = None,
+    sex: List[Sex] = None,
+    min_age: int = 0,
+    max_age: int = 90,
+    smoking_status: List[SmokingStatus] = None,
+) -> CohortFilterID:
+    """
+    A tool to construct a GDC cohort filter by by project and other optional additional fields.
+    This tool only creates the filter str, does not execute the API request. Pass the resulting CohortFilterID either into 'get_cases_with_cohort_filter'
+    or 'get_cases_with_available_data'.
+    The resulting JSON filter is cached server side and can be referenced using the unique identifier returned by this tool.
+    Args:
+        project: GDC project IDs. e.g ["TCGA-BRCA", "TCGA-LUAD"]
+        primary_site: Primary site of a disease e.g. ["Lung", "Brain"]
+        disease_type: Type of malignant disease e.g. ["adenomas and adenocarcinomas", "leukemia, nos"]
+        sex: A person's sex at birth e.g. any / many of ["male", "female", "unknown"],
+        min_age : Lower end of the age range. Age at the time of diagnosis, expressed in years. e.g 34
+        max_age : Higher end of the age range. Age at the time of diagnosis, expressed in years. e.g 76
+        smoking_status: Self reported current smoking status or smoking history of a patient. e.g. ["lifelong non-smoker", "current smoker"]
+    """
+
+    print(
+        f"get_cohort_filter_by_fields(project={repr(project)}, primary_site={repr(primary_site)}, disease_type={repr(disease_type)}, sex={repr(sex)}, min_age={repr(min_age)}, max_age={repr(max_age)}, smoking_status={repr(smoking_status)})",
+        file=sys.stderr,
+    )
+
+    cache_id = get_tool_id_template().format(
+        project=project,
+        primary_site=primary_site,
+        disease_type=disease_type,
+        sex=sex,
+        min_age=min_age,
+        max_age=max_age,
+        smoking_status=smoking_status,
+    )
+
+    # if we've already created this filter, refresh it in the cache and shortcut return
+    if cache_id in cache:
+        cache[cache_id] = cache[cache_id]
+        return cache_id
+
+    field_dict = {
+        "project": ("in", "cases.project.project_id"),
+        "primary_site": ("in", "cases.primary_site"),
+        "disease_type": ("in", "cases.disease_type"),
+        "sex": ("in", "cases.demographic.sex_at_birth"),
+        "min_age": (">=", "cases.diagnoses.age_at_diagnosis"),
+        "max_age": ("<=", "cases.diagnoses.age_at_diagnosis"),
+        "smoking_status": ("in", "cases.exposures.tobacco_smoking_status"),
+    }
+
+    value_dict = {
+        "project": project,
+        "primary_site": primary_site,
+        "disease_type": disease_type,
+        "sex": sex,
+        "min_age": int(min_age * 365),
+        "max_age": int(max_age * 365),
+        "smoking_status": smoking_status,
+    }
+
+    filters = []
+    for key, value in value_dict.items():
+        if value is not None:
+            filters.append(
+                {
+                    "op": field_dict[key][0],
+                    "content": {
+                        "field": field_dict[key][1],
+                        "value": value,
+                    },
+                }
+            )
+    if len(filters) == 1:
+        filter_str = json.dumps(filters[0], indent=4)
+    else:
+        filter_str = json.dumps({"op": "and", "content": filters}, indent=4)
+    cache[cache_id] = filter_str
+
+    print(filter_str)
     return cache_id
 
 
@@ -405,12 +757,13 @@ def get_cases_by_cohort_filter(cohort_filter: CohortFilterID) -> CaseSetId:
         _cohort_filter = cache[cohort_filter]
         cache[cohort_filter] = _cohort_filter
 
-    hits = gdc_query_all(
-        endpoint="cases",
-        filters={},
-        cohort_filter=_cohort_filter,
-        fields=["project.project_id", "submitter_id"],
-    )
+        hits = gdc_query_all(
+            endpoint="cases",
+            filters={},
+            cohort_filter=_cohort_filter,
+            fields=["project.project_id", "submitter_id"],
+        )
+
     case_ids = set([hit["id"] for hit in hits])
     cache[cache_id] = list(case_ids)
 
@@ -614,11 +967,14 @@ if __name__ == "__main__":
             - You should never assume what the user means by 'mutation' or 'somatic mutation'.
             - If the user's meaning of 'mutation' or 'somatic mutation' is unclear, you must stop and ask the user to specify if they mean simple somatic mutation (SSM), copy number variation (CNV), or both.
             - Even if the user asks for 'mutations in gene X', this is still ambiguous as the user could mean CNV in that gene and you must stop and clarify what the user means.
+            - For questions regarding gene expression always clarify which genes are being asked / discussed, do not assume all genes in GDC
+            - Additionally, for gene expression questions that are asking for average expression always clarify the 'tsv_units' preference for the user
 
             ## Architecture & Mental Model
 
             These tools query and operate over case sets.
             The raw case sets are never returned to the client, instead case sets are cached on the server and referenced by a unique identifier returned by the tools.
+
 
             ## Tool Categories & Workflow
 
@@ -628,14 +984,18 @@ if __name__ == "__main__":
             2. use the set manipulation tools to combine case sets
             3. use the information tools to get details about the curated case sets
 
+            Before calling a tool, state:
+            - Tool name: exactly as written
+            - Parameters: list each as "name (type): value"
+
             ## General Guidance
 
-            - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by {cohort_tool_type}.
+            - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, gene expression and by {cohort_tool_type}.
             - Case counts can be returned for any retrieved or computed case sets.
             - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'.
             """.format(
                 cohort_tool_type=(
-                    "cohort description" if args.use_cohort_copilot else "GDC project"
+                    "cohort description" if args.use_cohort_copilot else "GDC Project"
                 )
             )
         ),
@@ -645,6 +1005,10 @@ if __name__ == "__main__":
     mcp.add_tool(get_simple_somatic_mutation_occurrences)
     mcp.add_tool(get_copy_number_variant_occurrences)
     mcp.add_tool(get_microsatellite_instability_occurrences)
+    # mcp.add_tool(get_average_gene_expression)
+    mcp.add_tool(get_gene_expression_values)
+    mcp.add_tool(get_gene_expression_statistics)
+    mcp.add_tool(get_variable_gene_expression)
     if args.use_cohort_copilot:
         # NOTE: with cohort copilot v1, importing will load a model onto GPU so defer until needed
         # from .cohort_copilot import generate_filter
@@ -675,6 +1039,7 @@ if __name__ == "__main__":
         )
     else:
         mcp.add_tool(get_cohort_filter_by_project)
+
     mcp.add_tool(get_cases_by_cohort_filter)
     mcp.add_tool(compute_case_intersection)
     mcp.add_tool(compute_case_union)

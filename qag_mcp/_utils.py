@@ -1,11 +1,12 @@
 import inspect
 import json
 import sys
-from typing import Any
+from typing import Any, List
 
 import requests
+from pydantic import BaseModel
 
-from ._defines import GDC_API, TOOL_CACHE_ID_TEMPLATES, CaseSetId
+from ._defines import GDC_API, TOOL_CACHE_ID_TEMPLATES, CaseSetId, Gene
 
 
 def get_tool_id_template() -> str:
@@ -137,3 +138,43 @@ def gdc_query_all(
             break
 
     return all_hits
+
+
+def get_ensembl_gene_ids(genes: List[Gene]):
+    ensembl_gene_ids = []
+    for g in genes:
+        endpt = "https://api.gdc.cancer.gov/genes"
+        fields = ["gene_id"]
+        fields = ",".join(fields)
+        filters = {
+            "op": "and",
+            "content": [{"op": "=", "content": {"field": "symbol", "value": g}}],
+        }
+        params = {"filters": json.dumps(filters), "fields": fields, "size": 100}
+        try:
+            response = requests.get(endpt, params=params)
+            response_json = json.loads(response.content)
+            ensembl_gene_ids.append(response_json["data"]["hits"][0]["gene_id"])
+        except Exception as e:
+            print("unable to execute GDC API request {}".format(str(e)))
+    return ensembl_gene_ids
+
+
+class GeneExpressionAverage(BaseModel):
+    gene_id: str
+    avg_expression: float
+
+
+class AverageGeneExpressionResult(BaseModel):
+    genes: List[GeneExpressionAverage]
+
+
+class GeneExpressionVariable(BaseModel):
+    gene_id: str
+    symbol: str
+    log2_uqfpkm_median: float
+    log2_uqfpkm_stddev: float
+
+
+class VariableGeneExpressionResult(BaseModel):
+    selections: List[GeneExpressionVariable]
