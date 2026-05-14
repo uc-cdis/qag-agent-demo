@@ -15,31 +15,30 @@ Project = Annotated[
     ),
 ]
 CohortFilterID = Annotated[
-    str | None,
+    str,
     Field(
         description=(
-            "(Optional) ID reprsenting a JSON filter for describing a GDC cohort, for example 'Filter-Cohort-(TCGA-BRCA)'. "
+            "ID reprsenting a JSON filter for describing a GDC cohort, for example 'Filter-Cohort-(TCGA-BRCA)'. "
             "The JSON filters are cached server side and are referenced by this identifier."
         )
     ),
 ]
 Gene = Annotated[
-    str | None,
+    str,
     Field(
-        description="(Optional) Gene to query, for example 'BRAF'.",
+        description="Gene to query, for example 'BRAF'.",
     ),
 ]
 AAChange = Annotated[
-    str | None,
+    str,
     Field(
-        description="(Optional) Amino acid change to query (in HGVS protein notation), for example 'V600E'.",
+        description="Amino acid change to query (in HGVS protein notation), for example 'V600E'.",
     ),
 ]
 CNVChange = Annotated[
-    Literal["gain", "amplification", "heterozygous deletion", "homozygous deletion"]
-    | None,
+    Literal["gain", "amplification", "heterozygous deletion", "homozygous deletion"],
     Field(
-        description="(Optional) Copy number variation change to query. Valid options are 'gain', 'amplification', 'heterozygous deletion', or 'homozygous deletion'.",
+        description="Copy number variation change to query. Valid options are 'gain', 'amplification', 'heterozygous deletion', or 'homozygous deletion'.",
     ),
 ]
 MSIStatus = Annotated[
@@ -73,6 +72,5 @@ TOOL_CACHE_ID_TEMPLATES = {
     "get_microsatellite_instability_occurrences": "Cases-MSI-({msi_status})-({cohort_filter})",
     "get_cases_with_available_data": "Cases-Data-({data_type})-({cohort_filter})",
     "get_cases_by_cohort_filter": "Cases-Filter-({cohort_filter})",
-    "get_cohort_filter_by_project": "Filter-Project-({project})",
-    "get_cohort_filter_by_cohort_description": "Filter-Cohort-({cohort_description})",
+    "construct_cohort_filter": "Filter-Project-({project})",
 }

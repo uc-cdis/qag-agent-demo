@@ -8,10 +8,10 @@ from mcp.server.fastmcp import FastMCP
 # isort: off
 from _tool_const_filt import make_construct_filter_tool
 from _tool_case_handling import make_case_handling_tools
-from _tool_cnv import make_cnv_tool
-from _tool_msi import make_msi_tool
-from _tool_ssm import make_ssm_tool
 from _tool_var_avail import make_variant_case_availability_tool
+from _tool_var_cnv import make_cnv_tool
+from _tool_var_msi import make_msi_tool
+from _tool_var_ssm import make_ssm_tool
 # isort: on
 # fmt: on
 

@@ -13,7 +13,7 @@ from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 def make_msi_tool(cache: TTLCache):
     def get_microsatellite_instability_occurrences(
         msi_status: MSIStatus,
-        cohort_filter: CohortFilterID = None,
+        cohort_filter: CohortFilterID | None = None,
     ) -> CaseSetId:
         """
         A tool to query the GDC API for cases with microsatellite instability (MSI).

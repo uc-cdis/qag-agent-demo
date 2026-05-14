@@ -13,8 +13,8 @@ from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 def make_ssm_tool(cache: TTLCache):
     def get_simple_somatic_mutation_occurrences(
         gene: Gene,
-        aa_change: AAChange = None,
-        cohort_filter: CohortFilterID = None,
+        aa_change: AAChange | None = None,
+        cohort_filter: CohortFilterID | None = None,
     ) -> CaseSetId:
         """
         A tool to query the GDC API for cases with simple somatic mutations (SSMs).

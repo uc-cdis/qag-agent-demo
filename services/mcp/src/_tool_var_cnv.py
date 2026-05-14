@@ -12,13 +12,13 @@ from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
 def make_cnv_tool(cache: TTLCache):
     def get_copy_number_variant_occurrences(
-        gene: Gene = None,
-        cnv_change: CNVChange = None,
-        cohort_filter: CohortFilterID = None,
+        gene: Gene | None = None,
+        cnv_change: CNVChange | None = None,
+        cohort_filter: CohortFilterID | None = None,
     ) -> CaseSetId:
         """
         A tool to query the GDC API for cases with copy number variations (CNVs).
-        This tool searches for CNVs within a given gene, optionally for a specific change type, optionally within a specific cohort.
+        This tool searches for CNVs optionally within a given gene, optionally for a specific change type, optionally within a specific cohort.
         If only the gene is specified, this tool retrieves all cases with any change type for the given gene.
         If only the change type is specified, this tool retrieves all cases with the given change type in any gene.
         It is an error to use this tool without at least one of gene or change type.
