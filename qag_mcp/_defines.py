@@ -1,6 +1,12 @@
 from typing import Annotated, Any, Literal
 
+import yaml
 from pydantic import BaseModel, Field
+
+ENUMS_PATH = "/opt/gpudata/anirudh/git-repos/qag-agent-demo/qag_mcp/enumerations.yaml"
+
+with open(ENUMS_PATH) as f:
+    _CATALOG = yaml.safe_load(f)
 
 GDC_API = "https://api.gdc.cancer.gov"
 
@@ -59,13 +65,13 @@ MSIStatus = Annotated[
     ),
 ]
 PrimarySite = Annotated[
-    str | None,
+    Literal[*_CATALOG["cases.primary_site"]["values"]],
     Field(
         description="The text term used to describe the primary site of disease, as categorized by the World Health Organization's (WHO) International Classification of Diseases for Oncology (ICD-O). This categorization groups cases into general categories. Use 'search_primary_sites' to find valid values"
     ),
 ]
 DiseaseType = Annotated[
-    str | None,
+    Literal[*_CATALOG["cases.disease_type"]["values"]],
     Field(
         description="The text term used to describe the type of malignant disease, as categorized by the World Health Organization's (WHO) International Classification of Diseases for Oncology (ICD-O). Use 'search_disease_type' to find valid values"
     ),

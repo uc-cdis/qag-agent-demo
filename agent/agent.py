@@ -1,3 +1,17 @@
+"""
+python agent/agent.py \
+--mcp-url "http://localhost:8011/mcp" \
+--openai-api-url "http://localhost:8080/v1" \
+--openai-model-name "openai/gpt-oss-120b" \
+--openai-model-alias "(On-Prem) GPT OSS 120B" \
+--anthropic-model-name claude-sonnet-4-6 \
+--anthropic-model-alias "Claude Sonnet 4.6" \
+--google-model-name "gemini-3.1-pro-preview" \
+--google-model-alias "Gemini 3.1 Pro" \
+-p 8110 \
+--use-dev-ui "qag.html"
+"""
+
 import argparse
 import os
 from typing import List
@@ -30,7 +44,7 @@ async def sync_cohort_copilot_tool_backend(
 
 def make_agent(
     mcp_url: str,
-    retries: int = 2,
+    retries: int = 1,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
