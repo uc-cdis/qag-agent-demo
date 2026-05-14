@@ -135,7 +135,6 @@ if __name__ == "__main__":
     # see: https://github.com/pydantic/pydantic-ai/issues/4156
     # however, maybe you could instead use a subdomain?
     rel_dir = os.path.dirname(__file__)
-
     app = agent.to_web(
         models=models,
         html_source=os.path.join(rel_dir, "qag.html"),

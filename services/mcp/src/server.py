@@ -27,7 +27,7 @@ construct_cohort_filter = make_construct_filter_tool(cache)
 get_simple_somatic_mutation_occurrences = make_ssm_tool(cache)
 get_copy_number_variant_occurrences = make_cnv_tool(cache)
 get_microsatellite_instability_occurrences = make_msi_tool(cache)
-get_cases_with_available_data = make_variant_case_availability_tool(
+get_cases_with_available_variant_data = make_variant_case_availability_tool(
     cache=cache,
     compute_case_union=compute_case_union,
     get_microsatellite_instability_occurrences=get_microsatellite_instability_occurrences,
@@ -99,6 +99,6 @@ if __name__ == "__main__":
     mcp.add_tool(get_simple_somatic_mutation_occurrences)
     mcp.add_tool(get_copy_number_variant_occurrences)
     mcp.add_tool(get_microsatellite_instability_occurrences)
-    mcp.add_tool(get_cases_with_available_data)
+    mcp.add_tool(get_cases_with_available_variant_data)
 
     mcp.run(transport=args.transport)

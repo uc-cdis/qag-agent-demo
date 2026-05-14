@@ -4,7 +4,7 @@ from cachetools import TTLCache
 from mcp.server.fastmcp.exceptions import ToolError
 
 # isort: off
-from _defines import CaseSetId, DataType, CohortFilterID
+from _defines import CaseSetId, VariantType, CohortFilterID
 from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
 # isort: on
@@ -16,8 +16,8 @@ def make_variant_case_availability_tool(
     compute_case_union,
     get_microsatellite_instability_occurrences,
 ):
-    def get_cases_with_available_data(
-        data_type: DataType,
+    def get_cases_with_available_variant_data(
+        variant_type: VariantType,
         cohort_filter: CohortFilterID,
     ) -> CaseSetId:
         """
@@ -27,12 +27,12 @@ def make_variant_case_availability_tool(
         The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
         """
         print(
-            f"get_cases_with_available_data(data_type={repr(data_type)}, cohort_filter={repr(cohort_filter)})",
+            f"get_cases_with_available_variant_data(variant_type={repr(variant_type)}, cohort_filter={repr(cohort_filter)})",
             file=sys.stderr,
         )
 
         cache_id = get_tool_id_template().format(
-            data_type=data_type, cohort_filter=cohort_filter
+            variant_type=variant_type, cohort_filter=cohort_filter
         )
 
         # if we've already done this retrieval, refresh it in the cache and shortcut return
@@ -52,7 +52,7 @@ def make_variant_case_availability_tool(
             _cohort_filter = cache[cohort_filter]
             cache[cohort_filter] = _cohort_filter
 
-        if data_type in ["ssm", "cnv"]:
+        if variant_type in ["ssm", "cnv"]:
             hits = gdc_query_all(
                 endpoint="cases",
                 filters={
@@ -62,7 +62,7 @@ def make_variant_case_availability_tool(
                         "value": [
                             (
                                 "Aggregated Somatic Mutation"
-                                if data_type == "ssm"
+                                if variant_type == "ssm"
                                 else "Allele-specific Copy Number Segment"
                             )
                         ],
@@ -73,16 +73,16 @@ def make_variant_case_availability_tool(
             )
             case_ids = set([hit["id"] for hit in hits])
             cache[cache_id] = list(case_ids)
-        elif data_type in ["msi"]:
+        elif variant_type in ["msi"]:
             _msi_ids = get_microsatellite_instability_occurrences("msi", cohort_filter)
             _mss_ids = get_microsatellite_instability_occurrences("mss", cohort_filter)
             _ms_any_ids = compute_case_union(_msi_ids, _mss_ids)
             cache[cache_id] = cache[_ms_any_ids]
         else:
             raise ToolError(
-                f"Unknown how to find available cases for given data type: {data_type}"
+                f"Unknown how to find available cases for given variant type: {variant_type}"
             )
 
         return cache_id
 
-    return get_cases_with_available_data
+    return get_cases_with_available_variant_data

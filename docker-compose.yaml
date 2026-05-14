@@ -22,7 +22,7 @@ services:
           path: services/agent/src
           target: /agent/src
         - action: rebuild
-          path: requirements.txt
+          path: services/agent/requirements.txt
   mcp:
     build:
       context: .
@@ -36,7 +36,7 @@ services:
           path: services/mcp/src
           target: /mcp/src
         - action: rebuild
-          path: requirements.txt
+          path: services/mcp/requirements.txt
   vllm:
     build:
       context: .
