@@ -114,11 +114,11 @@ if __name__ == "__main__":
 
         if provider == "local":
             assert (
-                base_url is not None
+                base_url is not None and base_url != ""
             ), f"Must set {env_key}_URL env var for {provider} backend"
         else:
             assert (
-                api_key is not None
+                api_key is not None and api_key != ""
             ), f"Must set {env_key}_KEY env var for {provider} backend"
 
         provider = provider_cls(

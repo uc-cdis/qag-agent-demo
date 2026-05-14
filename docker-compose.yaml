@@ -11,7 +11,7 @@ services:
     ports:
       - "${AGENT_PORT}:${AGENT_PORT}"
     environment:
-      - LOCAL_API_URL="http://vllm:${VLLM_PORT}/v1"
+      - LOCAL_API_URL=http://vllm:${VLLM_PORT}/v1
       - ANTHROPIC_API_KEY
       - GOOGLE_API_KEY
       - OPENAI_API_KEY

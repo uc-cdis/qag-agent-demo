@@ -9,7 +9,7 @@ At its core, this demo relies on a strong, general-purpose, reasoning LLM and an
     1. [Modularization and Reusable Components](#modularization-and-reusable-components)
     1. [MCP Design Considerations](#mcp-design-considerations)
     1. [Making Minimal Changes](#making-minimal-changes)
-1. [Running the Demos](#running-the-demos)
+1. [Running the Demo](#running-the-demo)
 1. [Limitations](#local-llm-agent-limitations)
 
 
@@ -114,7 +114,10 @@ As described, this demo is the orchestration of 3 microservices:
 * the MCP server
 * the LLM server (optional)
 
-We run these servers in containers and use `docker compose` to orchestrate them, as defined in [docker-compose.yaml](docker-compose.yaml). If you do not wish to run a local LLM, comment out any lines/blocks in the compose config that related to `vllm`.
+We run these servers in containers and use `docker compose` to orchestrate them, as defined in [docker-compose.yaml](docker-compose.yaml). If you do not wish to run a local LLM, comment out any lines/blocks in the compose config that are related to `vllm`. Basic usage of `docker compose` to start the services can be run from the root of this repository as follows:
+```bash
+docker compose up
+```
 
 If you are running the servers on a remote host, you can use ssh tunneling to forward the remote port of the agent/UI server to your local so you can access on your local.
 
