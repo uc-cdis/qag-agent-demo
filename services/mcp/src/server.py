@@ -4,23 +4,21 @@ import sys
 from textwrap import dedent
 
 import requests
-from cachetools import TTLCache
-from mcp.server.fastmcp import FastMCP
-from mcp.server.fastmcp.exceptions import ToolError
-
-from ._defines import (
+from _defines import (
     AAChange,
     CaseCount,
     CaseSetId,
     CNVChange,
-    CohortDescription,
     CohortFilterID,
     DataType,
     Gene,
     MSIStatus,
     Project,
 )
-from ._utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
+from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
+from cachetools import TTLCache
+from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp.exceptions import ToolError
 
 cache = TTLCache(maxsize=1000, ttl=10800)
 
@@ -417,39 +415,6 @@ def get_cases_by_cohort_filter(cohort_filter: CohortFilterID) -> CaseSetId:
     return cache_id
 
 
-def make_cohort_copilot_tool(generate_filter):
-    # The method to generate_filter should be modular so that improvements to cohort copilot
-    # can be reflected simply by using a revised implementation of generate_filter
-    def get_cohort_filter_by_cohort_description(
-        cohort_description: CohortDescription,
-    ) -> CohortFilterID:
-        """
-        A tool to construct a GDC cohort filter of a described cohort, for example 'cases from the TCGA-BRCA project' or 'cases of non-smoking patients'.
-        The resulting JSON filter is cached server side and can be referenced using the unique identifier returned by this tool.
-        While this tool can take natural language inputs, it is best used with very simple, single attribute descriptions.
-        Do NOT provide gene filters to this tool.
-        """
-        print(
-            f"get_cohort_filter_by_cohort_description(cohort_description={repr(cohort_description)})",
-            file=sys.stderr,
-        )
-
-        cache_id = get_tool_id_template().format(cohort_description=cohort_description)
-
-        # if we've already created this filter, refresh it in the cache and shortcut return
-        if cache_id in cache:
-            cache[cache_id] = cache[cache_id]
-            return cache_id
-
-        filter_str = generate_filter(cohort_description)
-
-        cache[cache_id] = filter_str
-
-        return cache_id
-
-    return get_cohort_filter_by_cohort_description
-
-
 def compute_case_intersection(
     case_set_id_A: CaseSetId,
     case_set_id_B: CaseSetId,
@@ -591,11 +556,6 @@ if __name__ == "__main__":
         type=int,
         default=8000,
     )
-    parser.add_argument(
-        "--use-cohort-copilot",
-        default=False,
-        action="store_true",
-    )
     args = parser.parse_args()
 
     mcp = FastMCP(
@@ -630,51 +590,19 @@ if __name__ == "__main__":
 
             ## General Guidance
 
-            - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by {cohort_tool_type}.
+            - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by GDC project.
             - Case counts can be returned for any retrieved or computed case sets.
             - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'.
-            """.format(
-                cohort_tool_type=(
-                    "cohort description" if args.use_cohort_copilot else "GDC project"
-                )
-            )
+            """
         ),
+        host="0.0.0.0",
         port=args.port,
     )
 
     mcp.add_tool(get_simple_somatic_mutation_occurrences)
     mcp.add_tool(get_copy_number_variant_occurrences)
     mcp.add_tool(get_microsatellite_instability_occurrences)
-    if args.use_cohort_copilot:
-        # NOTE: with cohort copilot v1, importing will load a model onto GPU so defer until needed
-        # from .cohort_copilot import generate_filter
-
-        # NOTE: with cohort copilot v2, we can serve with different backends
-        # however, when integrating with this QAG MCP server, the agent backend using this QAG MCP
-        # can be different from the backend driving copilot v2
-        # NOTE: for the sake of the demo, we'd like the backends to be unified so there's
-        # some logic on the agent to switch which tool is available, depending on the agent's backend
-        get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
-            # cohort copilot v2 with claude backend
-            make_generate_filter_v2("anthropic"),
-        )
-        mcp.add_tool(
-            get_cohort_filter_by_cohort_description,
-            name="get_cohort_filter_by_cohort_description",
-        )
-
-        # NOTE we have a hacky way to separate out the nearly identical versions of copilot v2
-        # while preserving the natural language naming scheme
-        get_cohort_filter_by_cohort_description = make_cohort_copilot_tool(
-            # cohort copilot v2 with local backend
-            make_generate_filter_v2("openai"),
-        )
-        mcp.add_tool(
-            get_cohort_filter_by_cohort_description,
-            name="generate_cohort_filter_using_cohort_description",
-        )
-    else:
-        mcp.add_tool(get_cohort_filter_by_project)
+    mcp.add_tool(get_cohort_filter_by_project)
     mcp.add_tool(get_cases_by_cohort_filter)
     mcp.add_tool(compute_case_intersection)
     mcp.add_tool(compute_case_union)

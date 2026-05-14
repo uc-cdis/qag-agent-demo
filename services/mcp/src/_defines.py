@@ -14,12 +14,6 @@ Project = Annotated[
         description="GDC project name, for example 'TCGA-BRCA'.",
     ),
 ]
-CohortDescription = Annotated[
-    str,
-    Field(
-        description="Natural language description of a cohort of cases, for example 'cases from male patients with lung cancer'.",
-    ),
-]
 CohortFilterID = Annotated[
     str | None,
     Field(

@@ -4,12 +4,14 @@ import sys
 from typing import Any
 
 import requests
-
-from ._defines import GDC_API, TOOL_CACHE_ID_TEMPLATES, CaseSetId
+from _defines import GDC_API, TOOL_CACHE_ID_TEMPLATES, CaseSetId
 
 
 def get_tool_id_template() -> str:
-    frame = inspect.currentframe().f_back
+    curr_frame = inspect.currentframe()
+    assert curr_frame is not None
+    frame = curr_frame.f_back
+    assert frame is not None
     return TOOL_CACHE_ID_TEMPLATES[frame.f_code.co_name]
 
 
