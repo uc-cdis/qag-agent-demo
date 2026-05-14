@@ -72,8 +72,8 @@ For this demo, we use the following tools:
 * `docker` and `docker compose` to run and orchestrate the microservices
 * `FastMCP` to create our MCP server
 * `pydantic-ai` to create our agent and to serve a basic chat UI
-* `vLLM` to serves the LLM (optional)
-* `openai/gpt-oss-120b` as our reasoning model (optional)
+* `vLLM` to serves the LLM
+* `openai/gpt-oss-120b` as our reasoning model
 
 ### Prerequisites
 To run this demo, you need `docker` and `docker compose` at a minimum. If you are interested in running `openai/gpt-oss-120b` using on-prem hardware, you require a high-capacity GPU (at minimum an NVIDIA A100 80GB) to serve the reasoning model `openai/gpt-oss-120b`. Less capable open-weight models may also be used but results do improve with stronger reasoning and multistep planning capabilities. To prevent redownloading the model weights with each restart, you should download the weights locally using huggingface utilities:
@@ -112,7 +112,7 @@ LOCAL_MODEL_WEIGHTS=/path/to/saved/local/weights
 As described, this demo is the orchestration of 3 microservices:
 * the agent and UI server
 * the MCP server
-* the LLM server (optional)
+* the LLM server
 
 We run these servers in containers and use `docker compose` to orchestrate them, as defined in [docker-compose.yaml](docker-compose.yaml). If you do not wish to run a local LLM, comment out any lines/blocks in the compose config that are related to `vllm`. Basic usage of `docker compose` to start the services can be run from the root of this repository as follows:
 ```bash
