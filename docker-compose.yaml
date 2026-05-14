@@ -16,6 +16,13 @@ services:
       - GOOGLE_API_KEY
       - OPENAI_API_KEY
     command: ["--port", "${AGENT_PORT}", "--mcp-url", "http://mcp:${MCP_PORT}/mcp", "--model-config", "model-config.yaml"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: services/agent/src
+          target: /agent/src
+        - action: rebuild
+          path: requirements.txt
   mcp:
     build:
       context: .
@@ -23,6 +30,13 @@ services:
     ports:
       - "${MCP_PORT}:${MCP_PORT}"
     command: ["-t", "streamable-http", "-p", "${MCP_PORT}"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: services/mcp/src
+          target: /mcp/src
+        - action: rebuild
+          path: requirements.txt
   vllm:
     build:
       context: .

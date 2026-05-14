@@ -1,24 +1,127 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GDC QAG</title>
-    <script type="module" crossorigin src="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-Dtnbv4I1.js"></script>
-    <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-BtNS_N-J.css">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>
-      // get rid of pydantic banner
-      const observer = new MutationObserver(() => {
-        const h1 = document.querySelector("h1");
-        if (h1) {
-          h1.textContent = "🧬 GDC QAG 🔬";
-          observer.disconnect(); // stop watching once done
-        }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDC QAG</title>
+  <script type="module" crossorigin src="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-Dtnbv4I1.js"></script>
+  <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-BtNS_N-J.css">
+  <style>
+    #examples-box {
+      margin: 12px auto 0;
+      max-width: 1000px; /* match the chat UI width — tweak if needed */
+      padding: 14px 18px;
+      border: 1.5px solid #cacaca; /* lime-400 to match chat border */
+      border-radius: 12px;
+      background: #ffffff;
+    }
+
+    #examples-box p {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #examples-box .chips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #examples-box button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid #cacaca;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    #examples-box button:hover {
+      background: #f0fdf4;
+      border-color: #cacaca;
+      color: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <div id="examples-box" style="display:none">
+    <p>Example Questions</p>
+    <div class="chips"></div>
+  </div>
+
+  <script>
+    const SUGGESTIONS = [
+      "what is the prevalence of braf mutations in lung cancer? use ssms",
+      "what is the prevalence of braf mutations in lung cancer cases of non smoking women over 40, use ssms",
+      "what is the average gene expression for tp53 and muc16 in cases with lung adenocarcinoma?",
+      "list the most variably expressed genes in apollo-luad. compare TP53, muc16, braf",
+      // Add more examples here
+    ];
+
+    const PLACEHOLDER = "Ask me a question about GDC data — example questions are available below.";
+
+    let injected = false;
+
+    const observer = new MutationObserver(() => {
+      // Replace h1 title
+      const h1 = document.querySelector("h1");
+      if (h1 && h1.textContent !== "🧬 GDC QAG 🔬") {
+        h1.textContent = "🧬 GDC QAG 🔬";
+      }
+
+      // Update placeholder
+      const textarea = document.querySelector("textarea");
+      if (textarea && textarea.placeholder !== PLACEHOLDER) {
+        textarea.setAttribute("placeholder", PLACEHOLDER);
+      }
+
+      // Inject suggestion chips once
+      if (injected || !textarea) return;
+      injected = true;
+
+      const form = textarea.closest("form");
+      if (!form) return;
+
+      // Build the chips inside the pre-existing #examples-box
+      const box = document.getElementById("examples-box");
+      const chipsContainer = box.querySelector(".chips");
+      box.style.display = "block";
+
+      // Move the box to sit right after the form's parent in the DOM
+      const formParent = form.parentElement;
+      formParent.parentElement.insertBefore(box, formParent.nextSibling);
+
+      SUGGESTIONS.forEach(text => {
+        const btn = document.createElement("button");
+        btn.textContent = text;
+        btn.addEventListener("click", () => {
+          const nativeSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype, "value"
+          ).set;
+          nativeSetter.call(textarea, text);
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.focus();
+
+          // Click the send button
+          const sendBtn = document.querySelector("button[type='submit']")
+            || document.querySelector("form button:last-of-type");
+          if (sendBtn) sendBtn.click();
+        });
+        chipsContainer.appendChild(btn);
       });
-      observer.observe(document.body, { childList: true, subtree: true });
-    </script>
-  </body>
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  </script>
+</body>
 </html>
