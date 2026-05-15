@@ -35,7 +35,9 @@ get_cases_with_available_genomic_data = make_case_availability_tool(
     compute_case_union=compute_case_union,
     get_microsatellite_instability_occurrences=get_microsatellite_instability_occurrences,
 )
-get_gene_expression_statistics = make_gene_expression_tools(cache)
+get_gene_expression_statistics, get_most_variably_expressed_genes = (
+    make_gene_expression_tools(cache)
+)
 
 
 if __name__ == "__main__":
@@ -105,5 +107,6 @@ if __name__ == "__main__":
     mcp.add_tool(get_microsatellite_instability_occurrences)
     mcp.add_tool(get_cases_with_available_genomic_data)
     mcp.add_tool(get_gene_expression_statistics)
+    mcp.add_tool(get_most_variably_expressed_genes)
 
     mcp.run(transport=args.transport)
