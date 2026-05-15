@@ -27,8 +27,6 @@ services:
     build:
       context: .
       dockerfile: services/mcp/Dockerfile
-    ports:
-      - "${MCP_PORT}:${MCP_PORT}"
     command: ["-t", "streamable-http", "-p", "${MCP_PORT}"]
     develop:
       watch:
@@ -44,8 +42,6 @@ services:
     ipc: host
     volumes:
       - "${LOCAL_MODEL_WEIGHTS}:/model"
-    ports:
-      - "${VLLM_PORT}:${VLLM_PORT}"
     deploy:
       resources:
         reservations:
