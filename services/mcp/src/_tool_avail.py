@@ -51,13 +51,20 @@ def make_case_availability_tool(
         cohort_filter = cache[cohort_filter]
         cache[cohort_filter] = cohort_filter
 
-        if (
-            genomic_data_type == "ssm"
-            or genomic_data_type == "cnv"
-            or genomic_data_type == "gene_expression"
-        ):
+        if genomic_data_type == "ssm":
+            hits = gdc_query_all(
+                endpoint="case_ssms",
+                filters={
+                    "op": "in",
+                    "content": {"field": "available_variation_data", "value": ["ssm"]},
+                },
+                cohort_filter=cohort_filter,
+                fields=["project.project_id", "submitter_id"],
+            )
+            case_ids = set([hit["id"] for hit in hits])
+            cache[cache_id] = list(case_ids)
+        elif genomic_data_type == "cnv" or genomic_data_type == "gene_expression":
             data_type_value = {
-                "ssm": "Aggregated Somatic Mutation",
                 "cnv": "Allele-specific Copy Number Segment",
                 "gene_expression": "Gene Expression Quantification",
             }[genomic_data_type]
