@@ -12,15 +12,15 @@ from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
 def make_cnv_tool(cache: TTLCache):
     def get_copy_number_variant_occurrences(
+        cohort_filter: CohortFilterID,
         gene: Gene | None = None,
         cnv_change: CNVChange | None = None,
-        cohort_filter: CohortFilterID | None = None,
     ) -> CaseSetId:
         """
         A tool to query the GDC API for cases with copy number variations (CNVs).
-        This tool searches for CNVs optionally within a given gene, optionally for a specific change type, optionally within a specific cohort.
-        If only the gene is specified, this tool retrieves all cases with any change type for the given gene.
-        If only the change type is specified, this tool retrieves all cases with the given change type in any gene.
+        This tool searches within a specific cohort for CNVs, optionally within a given gene, optionally for a specific change type.
+        If only the gene is specified, this tool retrieves all cases in the cohort with any change type for the given gene.
+        If only the change type is specified, this tool retrieves all cases in the cohort with the given change type in any gene.
         It is an error to use this tool without at least one of gene or change type.
         The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
         """
@@ -44,16 +44,14 @@ def make_cnv_tool(cache: TTLCache):
             return cache_id
 
         # check cohort filters is in cache
-        _cohort_filter = None
-        if cohort_filter is not None:
-            if cohort_filter not in cache:
-                raise ToolError(
-                    f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
-                    f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
-                )
-            # refresh
-            _cohort_filter = cache[cohort_filter]
-            cache[cohort_filter] = _cohort_filter
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = cohort_filter
 
         # apparently `heterozygous deletion` change type is `loss` so remap it
         # keep the enum for the LLM to help it disambiguate the options
@@ -89,7 +87,7 @@ def make_cnv_tool(cache: TTLCache):
                 "op": "and",
                 "content": ops,
             },
-            cohort_filter=_cohort_filter,
+            cohort_filter=cohort_filter,
             fields=[
                 "cnv.cnv_change",
                 "cnv.cnv_change_5_category",

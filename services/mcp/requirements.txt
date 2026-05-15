@@ -2,3 +2,4 @@ mcp[cli]
 pydantic
 requests
 cachetools
+pandas

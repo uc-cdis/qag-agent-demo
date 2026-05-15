@@ -12,14 +12,13 @@ from _utils import gdc_query_all, get_tool_id_template, suggest_tool_from_id
 
 def make_ssm_tool(cache: TTLCache):
     def get_simple_somatic_mutation_occurrences(
+        cohort_filter: CohortFilterID,
         gene: Gene,
         aa_change: AAChange | None = None,
-        cohort_filter: CohortFilterID | None = None,
     ) -> CaseSetId:
         """
         A tool to query the GDC API for cases with simple somatic mutations (SSMs).
-        This tool searches for SSMs within a given gene, optionally resulting in an amino acid (AA) change, optionally within a specific cohort.
-        It is an error to use this tool without a specific gene.
+        This tool searches within a specific cohort for SSMs within a given gene, optionally resulting in an amino acid (AA) change.
         The resulting case set is cached server side and can be referenced using the unique identifier returned by this tool.
         """
         print(
@@ -42,16 +41,14 @@ def make_ssm_tool(cache: TTLCache):
             return cache_id
 
         # check cohort filters is in cache
-        _cohort_filter = None
-        if cohort_filter is not None:
-            if cohort_filter not in cache:
-                raise ToolError(
-                    f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
-                    f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
-                )
-            # refresh
-            _cohort_filter = cache[cohort_filter]
-            cache[cohort_filter] = _cohort_filter
+        if cohort_filter not in cache:
+            raise ToolError(
+                f"Cohort filter {cohort_filter} was not found in the server side cache, perhaps it expired? "
+                f"Try recreating that cohort filter to cache it again. {suggest_tool_from_id(cohort_filter)}"
+            )
+        # refresh
+        cohort_filter = cache[cohort_filter]
+        cache[cohort_filter] = cohort_filter
 
         # first get SSMs for the given query parameters, either by gene & AA change or just gene
         if aa_change is not None:
@@ -73,7 +70,7 @@ def make_ssm_tool(cache: TTLCache):
         hits = gdc_query_all(
             endpoint="ssms",
             filters=_filters,
-            cohort_filter=_cohort_filter,
+            cohort_filter=cohort_filter,
             fields=["gene_aa_change", "ssm_id"],
         )
 
@@ -89,7 +86,7 @@ def make_ssm_tool(cache: TTLCache):
         hits = gdc_query_all(
             endpoint="ssm_occurrences",
             filters=ssm_id_filter,
-            cohort_filter=_cohort_filter,
+            cohort_filter=cohort_filter,
             fields=["ssm.ssm_id", "case.submitter_id", "case.case_id"],
         )
         case_ids = set([hit["case"]["case_id"] for hit in hits])

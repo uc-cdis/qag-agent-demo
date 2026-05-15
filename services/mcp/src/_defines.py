@@ -10,7 +10,7 @@ TOOL_CACHE_ID_TEMPLATES = {
     "get_simple_somatic_mutation_occurrences": "Cases-SSM-({gene})-({aa_change})-({cohort_filter})",
     "get_copy_number_variant_occurrences": "Cases-CNV-({gene})-({cnv_change})-({cohort_filter})",
     "get_microsatellite_instability_occurrences": "Cases-MSI-({msi_status})-({cohort_filter})",
-    "get_cases_with_available_variant_data": "Cases-Data-({variant_type})-({cohort_filter})",
+    "get_cases_with_available_genomic_data": "Cases-Data-({genomic_data_type})-({cohort_filter})",
     "get_cases_by_cohort_filter": "Cases-Filter-({cohort_filter})",
     "construct_cohort_filter": "Filter-({project})-({primary_site})-({disease_type})-({sex})-({min_age})-({max_age})-({smoking_status})",
 }
@@ -60,11 +60,14 @@ MSIStatus = Annotated[
         description="Microsatellite instability status. Valid options are 'msi' for microsatellite instable or 'mss' for microsatellite stable.",
     ),
 ]
-VariantType = Annotated[
-    Literal["ssm", "cnv", "msi"],
-    Field(description="Genomic variant data modality."),
+Normalization = Annotated[
+    Literal["uqfpkm", "median_centered_log2_uqfpkm"],
+    Field(description="Gene expression normalization method."),
 ]
-
+GenomicDataType = Annotated[
+    Literal["ssm", "cnv", "msi", "gene_expression"],
+    Field(description="Genomic data modality."),
+]
 
 #####################################
 

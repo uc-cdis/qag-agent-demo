@@ -8,10 +8,11 @@ from mcp.server.fastmcp import FastMCP
 # isort: off
 from _tool_const_filt import make_construct_filter_tool
 from _tool_case_handling import make_case_handling_tools
-from _tool_var_avail import make_variant_case_availability_tool
+from _tool_avail import make_case_availability_tool
 from _tool_var_cnv import make_cnv_tool
 from _tool_var_msi import make_msi_tool
 from _tool_var_ssm import make_ssm_tool
+from _tool_gene_expr import make_gene_expression_tools
 # isort: on
 # fmt: on
 
@@ -27,11 +28,14 @@ construct_cohort_filter = make_construct_filter_tool(cache)
 get_simple_somatic_mutation_occurrences = make_ssm_tool(cache)
 get_copy_number_variant_occurrences = make_cnv_tool(cache)
 get_microsatellite_instability_occurrences = make_msi_tool(cache)
-get_cases_with_available_variant_data = make_variant_case_availability_tool(
+get_cases_with_available_genomic_data = make_case_availability_tool(
     cache=cache,
+    construct_cohort_filter=construct_cohort_filter,
+    get_cases_by_cohort_filter=get_cases_by_cohort_filter,
     compute_case_union=compute_case_union,
     get_microsatellite_instability_occurrences=get_microsatellite_instability_occurrences,
 )
+get_gene_expression_statistics = make_gene_expression_tools(cache)
 
 
 if __name__ == "__main__":
@@ -99,6 +103,7 @@ if __name__ == "__main__":
     mcp.add_tool(get_simple_somatic_mutation_occurrences)
     mcp.add_tool(get_copy_number_variant_occurrences)
     mcp.add_tool(get_microsatellite_instability_occurrences)
-    mcp.add_tool(get_cases_with_available_variant_data)
+    mcp.add_tool(get_cases_with_available_genomic_data)
+    mcp.add_tool(get_gene_expression_statistics)
 
     mcp.run(transport=args.transport)

@@ -86,6 +86,8 @@ def make_construct_filter_tool(cache: TTLCache):
         filters = []
         for key, value in value_dict.items():
             if value is not None:
+                if isinstance(value, str):
+                    value = value.lower()
                 filters.append(
                     {
                         "op": field_dict[key][0],
@@ -96,7 +98,7 @@ def make_construct_filter_tool(cache: TTLCache):
                     }
                 )
 
-        filter_str = json.dumps({"op": "and", "content": filters}, indent=4)
+        filter_str = json.dumps({"op": "and", "content": filters})
         cache[cache_id] = filter_str
         return cache_id
 
