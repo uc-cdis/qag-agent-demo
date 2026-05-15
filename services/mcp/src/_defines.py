@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import BeforeValidator, Field
 
 GDC_API = "https://api.gdc.cancer.gov"
 
@@ -245,6 +245,7 @@ PrimarySite = Annotated[
         "vagina",
         "vulva",
     ],
+    BeforeValidator(str.lower),
     Field(description="The primary site of disease."),
 ]
 DiseaseType = Annotated[
@@ -295,10 +296,12 @@ DiseaseType = Annotated[
         "transitional cell papillomas and carcinomas",
         "unknown",
     ],
+    BeforeValidator(str.lower),
     Field(description="The type of cancer."),
 ]
 Sex = Annotated[
     Literal["male", "female", "unknown"],
+    BeforeValidator(str.lower),
     Field(description="The patient's sex."),
 ]
 Age = Annotated[
@@ -316,5 +319,6 @@ SmokingStatus = Annotated[
         "smoking history not documented",
         "unknown",
     ],
+    BeforeValidator(str.lower),
     Field(description="The patient's self-reported smoking status and history."),
 ]

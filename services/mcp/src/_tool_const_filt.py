@@ -86,8 +86,6 @@ def make_construct_filter_tool(cache: TTLCache):
         filters = []
         for key, value in value_dict.items():
             if value is not None:
-                if isinstance(value, str):
-                    value = value.lower()
                 filters.append(
                     {
                         "op": field_dict[key][0],
