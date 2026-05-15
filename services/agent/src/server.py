@@ -11,6 +11,11 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from starlette.applications import Starlette
+from starlette.routing import Mount
+
+from _endpoint import make_endpoint_app  # isort: skip
+
 
 PROVIDER_MAP: dict[
     str,
@@ -135,8 +140,15 @@ if __name__ == "__main__":
     # see: https://github.com/pydantic/pydantic-ai/issues/4156
     # however, maybe you could instead use a subdomain?
     rel_dir = os.path.dirname(__file__)
-    app = agent.to_web(
+    ui_app = agent.to_web(
         models=models,
         html_source=os.path.join(rel_dir, "qag.html"),
+    )
+    endpoint_app = make_endpoint_app(agent=agent, models=models)
+    app = Starlette(
+        routes=[
+            Mount("/endpoint", app=endpoint_app),
+            Mount("/", app=ui_app),
+        ],
     )
     uvicorn.run(app, host="0.0.0.0", port=args.port)
