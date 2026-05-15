@@ -5,3 +5,4 @@ detect-secrets
 pandas
 tqdm
 pqdm
+vllm
