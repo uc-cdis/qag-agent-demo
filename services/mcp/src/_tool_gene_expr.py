@@ -120,8 +120,13 @@ def make_gene_expression_tools(cache: TTLCache):
                     "gene_type": "protein_coding",
                 },
             )
+            if not response.ok:
+                raise ToolError(f"GDC API returned status {response.status_code}")
+            data = response.json()
             genes = []
-            for item in response.json().get("gene_selection", []):
+            if "gene_selection" not in data:
+                raise ToolError("GDC API did not return genes")
+            for item in data["gene_selection"]:
                 if "symbol" not in item:
                     print(f"Gene did not have symbol: {item}")
                     continue

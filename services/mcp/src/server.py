@@ -30,8 +30,6 @@ get_copy_number_variant_occurrences = make_cnv_tool(cache)
 get_microsatellite_instability_occurrences = make_msi_tool(cache)
 get_cases_with_available_genomic_data = make_case_availability_tool(
     cache=cache,
-    construct_cohort_filter=construct_cohort_filter,
-    get_cases_by_cohort_filter=get_cases_by_cohort_filter,
     compute_case_union=compute_case_union,
     get_microsatellite_instability_occurrences=get_microsatellite_instability_occurrences,
 )
