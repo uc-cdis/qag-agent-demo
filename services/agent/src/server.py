@@ -142,7 +142,7 @@ if __name__ == "__main__":
     rel_dir = os.path.dirname(__file__)
     ui_app = agent.to_web(
         models=models,
-        html_source=os.path.join(rel_dir, "qag.html"),
+        html_source=os.path.join(rel_dir, "static/index.html"),
     )
     endpoint_app = make_endpoint_app(agent=agent, models=models)
     app = Starlette(

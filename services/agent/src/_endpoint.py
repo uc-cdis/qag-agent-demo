@@ -64,7 +64,7 @@ def make_endpoint_app(*, models, agent):
         if not req.backend:
             raise HTTPException(
                 400,
-                f"Multiple backends configured {list(models)}; specify 'backend'",
+                f"Must specify 'backend' as one of {list(models.keys())}",
             )
         model = models.get(req.backend)
         if model is None:
