@@ -1,5 +1,8 @@
+from typing import Annotated, Literal
+
 from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -13,12 +16,16 @@ from pydantic_core import to_json
 class InvokeRequest(BaseModel):
     query: str
     backend: str
+    output_type: Literal["percentage"] | None = None
 
 
-class InvokeResponse(BaseModel):
-    response: str
-    backed: str
-    steps: list[dict]
+class PercentageResponse(BaseModel):
+    answer: Annotated[
+        str,
+        Field(
+            description="Percentage answer, specified to 1 decimal place, for example '42.0%'",
+        ),
+    ]
 
 
 def extract_steps(messages) -> list[dict]:
@@ -56,7 +63,7 @@ def extract_steps(messages) -> list[dict]:
     return steps
 
 
-def make_endpoint_app(*, models, agent):
+def make_endpoint_app(*, models, agent: Agent):
     app = FastAPI(title="QAG Agent Endpoint API")
 
     @app.post("/invoke")
@@ -66,13 +73,21 @@ def make_endpoint_app(*, models, agent):
                 400,
                 f"Must specify 'backend' as one of {list(models.keys())}",
             )
+        query = req.query
+        output_type = None
+        if req.output_type is not None:
+            query = (
+                f"Answer the following question as a single percentage answer. {query}"
+            )
+            output_type = PercentageResponse
+
         model = models.get(req.backend)
         if model is None:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unknown backend: {req.backend}. Available: {list(models.keys())}",
             )
-        result = await agent.run(req.query, model=model)
+        result = await agent.run(query, model=model, output_type=output_type)
         payload = {
             "response": result.output,
             "backend": model,
