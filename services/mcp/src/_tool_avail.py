@@ -95,8 +95,8 @@ def make_case_availability_tool(
             case_ids = set([hit["id"] for hit in hits])
             cache[cache_id] = list(case_ids)
         elif genomic_data_type == "msi":
-            _msi_ids = get_microsatellite_instability_occurrences("msi", cohort_filter)
-            _mss_ids = get_microsatellite_instability_occurrences("mss", cohort_filter)
+            _msi_ids = get_microsatellite_instability_occurrences(cohort_filter, "msi")
+            _mss_ids = get_microsatellite_instability_occurrences(cohort_filter, "mss")
             _ms_any_ids = compute_case_union(_msi_ids, _mss_ids)
             cache[cache_id] = cache[_ms_any_ids]
         else:

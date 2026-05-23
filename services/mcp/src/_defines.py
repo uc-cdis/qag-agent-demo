@@ -83,6 +83,7 @@ CohortFilterID = Annotated[
 Project = Annotated[
     Literal[
         "APOLLO-LUAD",
+        "APOLLO-OV",
         "BEATAML1.0-COHORT",
         "BEATAML1.0-CRENOLANIB",
         "CDDP_EAGLE-1",
