@@ -7,6 +7,7 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
 )
@@ -33,7 +34,14 @@ def extract_steps(messages) -> list[dict]:
     for msg in messages:
         if isinstance(msg, ModelResponse):
             for part in msg.parts:
-                if isinstance(part, ToolCallPart):
+                if isinstance(part, ThinkingPart):
+                    steps.append(
+                        {
+                            "type": "thinking",
+                            "content": part.content,
+                        }
+                    )
+                elif isinstance(part, ToolCallPart):
                     steps.append(
                         {
                             "type": "tool_call",
