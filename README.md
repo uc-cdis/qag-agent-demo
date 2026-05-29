@@ -23,7 +23,7 @@ Modern agentic LLMs with well-documented MCP tools are sufficiently powerful to 
 
 The overall architecture of agentic QAG is diagramed in this figure:
 
-![QAG v2 Agentic Architecture](static/2026-02-23%20QAG%20Agent%20Demo.png)
+![QAG v2.2 Agentic Architecture](static/2026-05-29%20QAG%20Agent%20Demo%20v2.2.png)
 
 ### Guiding Use Cases
 
