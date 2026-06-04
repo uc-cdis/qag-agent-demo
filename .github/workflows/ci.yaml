@@ -12,7 +12,6 @@ concurrency:
 jobs:
   BuildImageAndPush:
     name: Build ${{ matrix.service }} Image and Push
-    needs: Security
     strategy:
       fail-fast: false
       matrix:
