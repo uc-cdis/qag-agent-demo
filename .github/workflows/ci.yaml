@@ -23,7 +23,7 @@ jobs:
             dockerfile: ./services/mcp/Dockerfile
             repo_suffix: mcp
 
-    uses: uc-cdis/.github/.github/workflows/image_build_push_native.yaml@master
+    uses: uc-cdis/.github/.github/workflows/image_build_push.yaml@master
     with:
       DOCKERFILE_LOCATION: ${{ matrix.dockerfile }}
       DOCKERFILE_BUILD_CONTEXT: .
