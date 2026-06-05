@@ -144,15 +144,13 @@ if __name__ == "__main__":
     rel_dir = Path(os.path.dirname(__file__))
     ui_app = agent.to_web(
         models=models,
-        html_source=rel_dir / "static/dist/index.html",
+        html_source=rel_dir / "static/index.html",
     )
     endpoint_app = make_endpoint_app(agent=agent, models=models)
     app = Starlette(
         routes=[
             Mount("/endpoint", app=endpoint_app),
-            Mount(
-                "/qag/assets", app=StaticFiles(directory=rel_dir / "static/dist/assets")
-            ),
+            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
             Mount("/qag", app=ui_app),
         ],
     )
