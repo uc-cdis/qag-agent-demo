@@ -1,5 +1,6 @@
 import argparse
 import os
+from pathlib import Path
 
 import uvicorn
 import yaml
@@ -13,6 +14,7 @@ from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from starlette.applications import Starlette
 from starlette.routing import Mount
+from starlette.staticfiles import StaticFiles
 
 from _endpoint import make_endpoint_app  # isort: skip
 
@@ -139,16 +141,19 @@ if __name__ == "__main__":
     # this app cannot be mounted under a base path as the frontend logic hard codes some paths
     # see: https://github.com/pydantic/pydantic-ai/issues/4156
     # however, maybe you could instead use a subdomain?
-    rel_dir = os.path.dirname(__file__)
+    rel_dir = Path(os.path.dirname(__file__))
     ui_app = agent.to_web(
         models=models,
-        html_source=os.path.join(rel_dir, "static/index.html"),
+        html_source=rel_dir / "static/dist/index.html",
     )
     endpoint_app = make_endpoint_app(agent=agent, models=models)
     app = Starlette(
         routes=[
             Mount("/endpoint", app=endpoint_app),
-            Mount("/", app=ui_app),
+            Mount(
+                "/qag/assets", app=StaticFiles(directory=rel_dir / "static/dist/assets")
+            ),
+            Mount("/qag", app=ui_app),
         ],
     )
     uvicorn.run(app, host="0.0.0.0", port=args.port)
