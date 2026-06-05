@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  BuildImageAndPush:
+    name: Build ${{ matrix.service }} Image and Push
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: agent
+            dockerfile: ./services/agent/Dockerfile
+            repo_suffix: agent
+          - service: mcp
+            dockerfile: ./services/mcp/Dockerfile
+            repo_suffix: mcp
+
+    uses: uc-cdis/.github/.github/workflows/image_build_push.yaml@master
+    with:
+      DOCKERFILE_LOCATION: ${{ matrix.dockerfile }}
+      DOCKERFILE_BUILD_CONTEXT: .
+      OVERRIDE_REPO_NAME: ${{ github.event.repository.name }}-${{ matrix.repo_suffix }}
+    secrets:
+      ECR_AWS_ACCESS_KEY_ID: ${{ secrets.ECR_AWS_ACCESS_KEY_ID }}
+      ECR_AWS_SECRET_ACCESS_KEY: ${{ secrets.ECR_AWS_SECRET_ACCESS_KEY }}
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_ROBOT_TOKEN: ${{ secrets.QUAY_ROBOT_TOKEN }}
