@@ -88,7 +88,7 @@ if __name__ == "__main__":
 
             - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by GDC project.
             - Case counts can be returned for any retrieved or computed case sets.
-            - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'. Another example, if a user asks for 'prevalence of SSM or CNV in gene X', you should report 'cases with SSM or CNV in gene X / cases with any SSM or CNV'.
+            - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'.
             """
         ),
         host="0.0.0.0",
