@@ -218,4 +218,3 @@ node_modules
 .langgraph_api
 claude.txt
 .vscode
-commands.sh
