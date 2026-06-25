@@ -40,9 +40,26 @@ PROVIDER_MAP: dict[
 }
 
 
-def make_ag_ui_app(agent: Agent) -> Starlette:
+def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
     async def run_ag_ui(request: Request) -> Response:
-        return await AGUIAdapter.dispatch_request(request, agent=agent)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        requested_model_alias = body.get("model")
+        selected_model = models.get(requested_model_alias)
+
+        if not selected_model and models:
+            default_alias = next(iter(models.keys()))
+            selected_model = models[default_alias]
+            print(
+                f"Warning: Model '{requested_model_alias}' not found. Falling back to '{default_alias}'."
+            )
+
+        return await AGUIAdapter.dispatch_request(
+            request, agent=agent, model=selected_model
+        )
 
     return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
 
@@ -155,7 +172,7 @@ if __name__ == "__main__":
         models=models,
         html_source=rel_dir / "static/index.html",
     )
-    ag_ui_app = make_ag_ui_app(agent)
+    ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
 
     app = Starlette(
