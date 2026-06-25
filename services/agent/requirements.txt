@@ -1,2 +1,4 @@
-pydantic-ai[mcp]
+pydantic-ai[ag-ui,mcp,openai,anthropic,google]==2.0.0
 fastapi
+uvicorn
+pyyaml
