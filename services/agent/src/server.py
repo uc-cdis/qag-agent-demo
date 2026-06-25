@@ -5,15 +5,18 @@ from pathlib import Path
 import uvicorn
 import yaml
 from pydantic_ai import Agent, ConcurrencyLimit
-from pydantic_ai.mcp import MCPServerStreamableHTTP
+from pydantic_ai.mcp import MCPToolset, StreamableHttpTransport
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.ui.ag_ui import AGUIAdapter
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from _endpoint import make_endpoint_app  # isort: skip
@@ -36,6 +39,14 @@ PROVIDER_MAP: dict[
     ),  # assume local is using OpenAI compatible API
 }
 
+
+def make_ag_ui_app(agent: Agent) -> Starlette:
+    async def run_ag_ui(request: Request) -> Response:
+        return await AGUIAdapter.dispatch_request(request, agent=agent)
+
+    return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
+
+
 # NOTE: if you want to switch to the newer OpenAI responses API (with OpenAIResponsesModel),
 # you may need to do some patching of the response stream for the pydantic AI model client implementation
 # see this prior commit as a reference: https://github.com/StevenSong/qag-agent-demo/blob/79ff198623fd2fc0025e383c323cd526a75684a0/agent/agent.py
@@ -47,7 +58,10 @@ def make_agent(
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
-    mcp_server = MCPServerStreamableHTTP(mcp_url)
+    mcp_server = MCPToolset(
+        StreamableHttpTransport(mcp_url),
+        include_instructions=True,
+    )
 
     agent = Agent(
         toolsets=[mcp_server],
@@ -92,10 +106,6 @@ def make_agent(
         compute a / b
         """
         return a / b
-
-    @agent.instructions
-    async def mcp_server_instructions():
-        return mcp_server.instructions
 
     return agent
 
@@ -145,7 +155,7 @@ if __name__ == "__main__":
         models=models,
         html_source=rel_dir / "static/index.html",
     )
-    ag_ui_app = agent.to_ag_ui(models=models)
+    ag_ui_app = make_ag_ui_app(agent)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
 
     app = Starlette(
