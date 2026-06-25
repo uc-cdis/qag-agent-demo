@@ -145,11 +145,14 @@ if __name__ == "__main__":
         models=models,
         html_source=rel_dir / "static/index.html",
     )
+    ag_ui_app = agent.to_ag_ui(models=models)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
+
     app = Starlette(
         routes=[
             Mount("/qag/endpoint", app=endpoint_app),
             Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/qag/agui", app=ag_ui_app),
             Mount("/qag", app=ui_app),
         ],
     )
