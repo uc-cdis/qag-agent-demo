@@ -1,2 +1,2 @@
-pydantic-ai
+pydantic-ai[mcp]
 fastapi
