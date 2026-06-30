@@ -24,7 +24,7 @@ class PercentageResponse(BaseModel):
     answer: Annotated[
         str,
         Field(
-            description="Percentage answer, specified to 1 decimal place, for example '42.0%'",
+            description="Percentage answer, specified to 2 decimal places, for example '42.00%'",
         ),
     ]
 
