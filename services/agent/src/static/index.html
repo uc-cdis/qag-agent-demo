@@ -88,13 +88,28 @@
       return box;
     }
 
+    function removeBox() {
+      const box = document.getElementById("examples-box");
+      if (box) box.remove();
+    }
+
     let injected = false;
     const originalPushState = history.pushState.bind(history);
     const originalReplaceState = history.replaceState.bind(history);
 
+    function isIndexRoute() {
+      const segments = window.location.pathname.split("/").filter(Boolean);
+      // ["qag"] => index; ["qag", "<id>"] => a conversation
+      return segments.length <= 1;
+    }
+
     function onNavigate() {
-      const isBarePath = window.location.pathname === "/";
-      if (isBarePath) {
+      if (isIndexRoute()) {
+        injected = false;
+      } else {
+        // Left the index route: tear down the box and reset so it
+        // re-injects if we navigate back.
+        removeBox();
         injected = false;
       }
     }
@@ -122,18 +137,28 @@
 
       // Update placeholder
       const textarea = document.querySelector("textarea");
-      const isBarePath = window.location.pathname === "/" || window.location.pathname === "";
+      const isBarePath = isIndexRoute();
       const targetPlaceholder = isBarePath ? PLACEHOLDER_W_EX : PLACEHOLDER_NO_EX;
       if (textarea && textarea.placeholder !== targetPlaceholder) {
         textarea.setAttribute("placeholder", targetPlaceholder);
       }
 
+      // Off the index route: ensure the box is gone and bail. This is the
+      // safety net in case the pushState hook and the SPA's re-render don't
+      // line up — the observer catches the route change either way.
+      if (!isBarePath) {
+        removeBox();
+        injected = false;
+        return;
+      }
+
       // Inject suggestion chips once, only on a bare path (no active conversation)
-      if (injected || !textarea || !isBarePath) return;
-      injected = true;
+      if (injected || !textarea) return;
 
       const form = textarea.closest("form");
       if (!form) return;
+
+      injected = true;
 
       // Build #examples-box and inject the chips
       const box = injectBox();
