@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDC QAG</title>
+  <script type="module" crossorigin src="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-Dtnbv4I1.js"></script>
+  <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-BtNS_N-J.css">
+  <style>
+    #examples-box {
+      margin: 12px auto 0;
+      max-width: 1000px; /* match the chat UI width — tweak if needed */
+      padding: 14px 18px;
+      border: 1.5px solid #cacaca; /* lime-400 to match chat border */
+      border-radius: 12px;
+      background: #ffffff;
+    }
+
+    #examples-box p {
+      margin: 0 0 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    #examples-box .chips {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    #examples-box button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid #cacaca;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    #examples-box button:hover {
+      background: #f0fdf4;
+      border-color: #cacaca;
+      color: #1a1a1a;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script>
+    const SUGGESTIONS = [
+      "What is the prevalence of BRAF SSMs in lung cancer?",
+      "What is the prevalence of BRAF SSMs in lung cancer cases of non smoking women over 40?",
+      "What is the average gene expression for TP53 and MUC16 in cases with lung adenocarcinoma?",
+      "What is the average gene expression of BRAF in TCGA-BRCA?",
+      "List the most variably expressed genes in APOLLO-LUAD.",
+      "Compare the expression of TP53, MUC16, and BRAF in APOLLO-LUAD."
+    ];
+
+    const PLACEHOLDER_W_EX = "Ask me a question about GDC data — example questions are available below.";
+    const PLACEHOLDER_NO_EX = "Ask me a question about GDC data.";
+
+    function injectBox() {
+      // Remove any existing box first to avoid duplicates
+      const existing = document.getElementById("examples-box");
+      if (existing) existing.remove();
+
+      const box = document.createElement("div");
+      box.id = "examples-box";
+
+      const label = document.createElement("p");
+      label.textContent = "Example Questions";
+      box.appendChild(label);
+
+      const chips = document.createElement("div");
+      chips.className = "chips";
+      box.appendChild(chips);
+
+      document.body.appendChild(box);
+      return box;
+    }
+
+    let injected = false;
+    const originalPushState = history.pushState.bind(history);
+    const originalReplaceState = history.replaceState.bind(history);
+
+    function onNavigate() {
+      const isBarePath = window.location.pathname === "/";
+      if (isBarePath) {
+        injected = false;
+      }
+    }
+
+    history.pushState = (...args) => {
+      originalPushState(...args);
+      onNavigate();
+    };
+
+    history.replaceState = (...args) => {
+      originalReplaceState(...args);
+      onNavigate();
+    };
+
+    window.addEventListener("popstate", (e) => {
+      onNavigate();
+    });
+
+    const observer = new MutationObserver(() => {
+      // Replace h1 title
+      const h1 = document.querySelector("h1");
+      if (h1 && h1.textContent !== "🧬 GDC QAG 🔬") {
+        h1.textContent = "🧬 GDC QAG 🔬";
+      }
+
+      // Update placeholder
+      const textarea = document.querySelector("textarea");
+      const isBarePath = window.location.pathname === "/" || window.location.pathname === "";
+      const targetPlaceholder = isBarePath ? PLACEHOLDER_W_EX : PLACEHOLDER_NO_EX;
+      if (textarea && textarea.placeholder !== targetPlaceholder) {
+        textarea.setAttribute("placeholder", targetPlaceholder);
+      }
+
+      // Inject suggestion chips once, only on a bare path (no active conversation)
+      if (injected || !textarea || !isBarePath) return;
+      injected = true;
+
+      const form = textarea.closest("form");
+      if (!form) return;
+
+      // Build #examples-box and inject the chips
+      const box = injectBox();
+      const chipsContainer = box.querySelector(".chips");
+      box.style.display = "block";
+
+      // Move the box to sit right after the form's parent in the DOM
+      const formParent = form.parentElement;
+      formParent.parentElement.insertBefore(box, formParent.nextSibling);
+
+      SUGGESTIONS.forEach(text => {
+        const btn = document.createElement("button");
+        btn.textContent = text;
+        btn.addEventListener("click", () => {
+          const nativeSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLTextAreaElement.prototype, "value"
+          ).set;
+          nativeSetter.call(textarea, text);
+          textarea.dispatchEvent(new Event("input", { bubbles: true }));
+          textarea.focus();
+
+          // Click the send button
+          const sendBtn = document.querySelector("button[type='submit']")
+            || document.querySelector("form button:last-of-type");
+          if (sendBtn) sendBtn.click();
+        });
+        chipsContainer.appendChild(btn);
+      });
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+  </script>
+</body>
+</html>
