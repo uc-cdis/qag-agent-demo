@@ -1,16 +1,29 @@
 backends:
-  - provider: local
+  - provider: openai
+    name: openai.gpt-oss-120b
+    alias: (Bedrock) GPT OSS 120B
+    env_prefix: BEDROCK_API
+  - provider: openai
+    name: zai.glm-4.7-flash
+    alias: (Bedrock) Z.ai GLM 4.7 Flash
+    env_prefix: BEDROCK_API
+  - provider: openai
     name: openai/gpt-oss-120b
     alias: (On-Prem) GPT OSS 120B
+    env_prefix: ONPREM_API
   # - provider: anthropic
   #   name: claude-sonnet-4-6
   #   alias: Claude Sonnet 4.6
+  #   env_prefix: ANTHROPIC_API
   # - provider: anthropic
   #   name: claude-opus-4-7
   #   alias: Claude Opus 4.7
+  #   env_prefix: ANTHROPIC_OPUS_API
   # - provider: google
   #   name: gemini-3.1-pro-preview
   #   alias: Gemini 3.1 Pro
+  #   env_prefix: GOOGLE_API
   # - provider: openai
   #   name: gpt-5.5
   #   alias: GPT 5.5
+  #   env_prefix: OPENAI_API

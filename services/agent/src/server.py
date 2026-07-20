@@ -24,16 +24,14 @@ from _endpoint import make_endpoint_app  # isort: skip
 PROVIDER_MAP: dict[
     str,
     tuple[
-        str,  # env var prefix, suffix with _KEY or _URL
         type[AnthropicModel | GoogleModel | OpenAIChatModel],
         type[AnthropicProvider | GoogleProvider | OpenAIProvider],
     ],
 ] = {
-    "anthropic": ("ANTHROPIC_API", AnthropicModel, AnthropicProvider),
-    "google": ("GOOGLE_API", GoogleModel, GoogleProvider),
-    "openai": ("OPENAI_API", OpenAIChatModel, OpenAIProvider),
+    "anthropic": (AnthropicModel, AnthropicProvider),
+    "google": (GoogleModel, GoogleProvider),
+    "openai": (OpenAIChatModel, OpenAIProvider),
     "local": (
-        "LOCAL_API",
         OpenAIChatModel,
         OpenAIProvider,
     ),  # assume local is using OpenAI compatible API
@@ -140,27 +138,28 @@ if __name__ == "__main__":
     with open(args.model_config) as f:
         backends = yaml.safe_load(f)["backends"]
     for backend in backends:
-        provider = backend["provider"]
-        env_key, model_cls, provider_cls = PROVIDER_MAP[provider]
-        api_key = os.environ.get(f"{env_key}_KEY", None)
-        base_url = os.environ.get(f"{env_key}_URL", None)
+        provider_type = backend["provider"]
+        env_prefix = backend["env_prefix"]
+        model_cls, provider_cls = PROVIDER_MAP[provider_type]
+        api_key = os.environ.get(f"{env_prefix}_KEY", None)
+        base_url = os.environ.get(f"{env_prefix}_URL", None)
 
-        if provider == "local":
+        if provider_type == "local":
             assert (
                 base_url is not None and base_url != ""
-            ), f"Must set {env_key}_URL env var for {provider} backend"
+            ), f"Must set {env_prefix}_URL env var for {provider_type} backend"
         else:
             assert (
                 api_key is not None and api_key != ""
-            ), f"Must set {env_key}_KEY env var for {provider} backend"
+            ), f"Must set {env_prefix}_KEY env var for {provider_type} backend"
 
-        provider = provider_cls(
+        provider_inst = provider_cls(
             base_url=base_url,
             api_key=api_key,
         )
         models[backend["alias"]] = model_cls(
             model_name=backend["name"],
-            provider=provider,  # type: ignore
+            provider=provider_inst,  # type: ignore
         )
 
     # serve the agent with the built in dev UI
