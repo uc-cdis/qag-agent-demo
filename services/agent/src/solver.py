@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-import json
 from typing import Any
-
-from executor import ExecutionResult, NodeStatus
 from planner import PlanDag
+from prompts import SOLVER_PROMPT
+from executor import ExecutionResult, NodeStatus
 
 
 class Solver:
-    def __init__(self, *, prompt: str, client: Any, model: str) -> None:
+    def __init__(
+        self,
+        *,
+        client: Any,
+        model: str,
+        prompt: str = SOLVER_PROMPT,
+    ) -> None:
         self.prompt = prompt
         self.client = client
         self.model = model
@@ -45,7 +50,7 @@ class Solver:
                 )
 
             elif status == NodeStatus.BLOCKED:
-                entry["error"] = "Failed dependency upstream, step"
+                entry["error"] = "Failed dependency upstream"
 
             history.append(entry)
 
@@ -56,6 +61,7 @@ class Solver:
         task: str,
         plan_dag: PlanDag,
         execution_result: ExecutionResult,
+        token_usage: dict[str, int],
     ) -> str:
         history = self.create_plan_evidence_history(
             plan_dag,
@@ -66,12 +72,16 @@ class Solver:
             task=task,
             plan_evidence_history=history,
         )
+        token_usage["input_tokens"] += response.usage.prompt_tokens
+        token_usage["output_tokens"] += response.usage.completion_tokens
+        token_usage["total_tokens"] += response.usage.total_tokens
 
         content = response.choices[0].message.content
 
         if content is None:
             raise ValueError("Solver returned empty content")
 
+        print(content)
         return content
 
     def _solve(
@@ -90,7 +100,7 @@ class Solver:
                     ),
                 }
             ],
-            temperature=1.0,
+            temperature=0.0,
             max_tokens=2048,
             seed=42,
         )

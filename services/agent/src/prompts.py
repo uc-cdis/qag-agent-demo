@@ -21,7 +21,8 @@ Rules:
 7. Prevalence means:
    number of matching cases / number of eligible cases with data availability.
 8. Return only the schema-conforming response.
-9. Return plans that include final answer generation
+9. Simple tools require raw case counts for computation
+10. Return complete plans only such that they reveal the final answer.
 
 ##Available Tools##
 {tool_description}
@@ -36,6 +37,9 @@ SOLVER_PROMPT = """
 You are an AI assitant who solves problems given a concrete step by step plan and evidences for each step.
 Your task is to briefly state the problem, the steps takens to arrive at a solution and then using the evidence
 make a short final conclusion for your task. The main task is a Q&A about accurate variant statistics for the GDC.
+
+RULES:
+1. Return numerical answers specified to 2 decimal places, for example '42.05%'.
 
 ##Original Task##
 {task}

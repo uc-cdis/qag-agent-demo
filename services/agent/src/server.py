@@ -1,11 +1,19 @@
 import argparse
 import os
-from pathlib import Path
-
 import uvicorn
-import yaml
-from pydantic_ai import Agent, ConcurrencyLimit
-from pydantic_ai.mcp import MCPToolset, StreamableHttpTransport
+
+from pathlib import Path
+from typing import Any, TypedDict, cast
+
+from pydantic_ai import (
+    Agent,
+    ApprovalRequired,
+    ConcurrencyLimit,
+    DeferredToolRequests,
+    RunContext,
+)
+from openai import OpenAI
+from orchestrator import make_default_rewoo_orchestrator
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -39,6 +47,11 @@ PROVIDER_MAP: dict[
     ),  # assume local is using OpenAI compatible API
 }
 
+class ApprovalMetadata(TypedDict, total=False):
+    run_id: str
+    user_feedback: str
+
+
 
 def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
     async def run_ag_ui(request: Request) -> Response:
@@ -70,25 +83,23 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
 
 
 def make_agent(
-    mcp_url: str,
+    *,
+    model: str | Any,
+    orchestrator: Any,
     retries: int = 1,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
-    mcp_server = MCPToolset(
-        StreamableHttpTransport(mcp_url),
-        include_instructions=True,
-    )
-
     agent = Agent(
-        toolsets=[mcp_server],
+        model=model,
+        output_type=[str, DeferredToolRequests],
         instructions=(
-            "You are a helpful bioinformatics assistant with access to specialized "
-            "tools to query information about genetic mutations using the Genomic Data Commons (GDC). "
-            "Use the tools to answer questions. Multiple chained tool calls may be required to answer a question. "
-            "If a user query is ambiguous, stop and ask them to clarify before trying to find the answer. "
-            "Pay particular attention to the instructions provided by the tool providers, as they may further clarify what ambiguities exist. "
-            "Also math is hard for LLMs to do in natural language. If you need to do arithmetic, just use the tools."
+            "You are a light user-facing controller for a ReWOO bioinformatics "
+            "workflow over Genomic Data Commons data.\n\n"
+            "Never write plans, cohort definitions, or GDC queries as prose."
+            "To help the user, your only option is to call start_rewoo(user_query=...)." 
+            "That tool will draft the plan and return it for approval — the UI will show the plan and approve/deny buttons." 
+            "Do not narrate what you're about to do; just call the tool."
         ),
         max_concurrency=ConcurrencyLimit(
             max_running=max_running, max_queued=max_queued
@@ -96,33 +107,40 @@ def make_agent(
         retries=retries,
     )
 
-    @agent.tool_plain
-    def add(a: float, b: float) -> float:
-        """
-        compute a + b
-        """
-        return a + b
+    @agent.tool
+    async def start_rewoo(
+        ctx: RunContext,
+        user_query: str,
+    ) -> dict[str, Any]:
+        if not ctx.tool_call_approved:
+            pending = await orchestrator.create_plan(user_query)
+            orchestrator._register_pending(ctx.tool_call_id, pending.run_id)
+            
+            raise ApprovalRequired(
+                metadata={
+                    "approval_kind": "rewoo_plan",
+                    "run_id": pending.run_id,
+                    "status": str(pending.run_status),
+                    "query": user_query,
+                    "plan": pending.plan_summary,
+                    "message": (
+                        "Approve this ReWOO plan to execute it, or deny and "
+                        "provide feedback for a revised plan."
+                    ),
+                }
+            )
 
-    @agent.tool_plain
-    def subtract(a: float, b: float) -> float:
-        """
-        compute a - b
-        """
-        return a - b
-
-    @agent.tool_plain
-    def multiply(a: float, b: float) -> float:
-        """
-        compute a * b
-        """
-        return a * b
-
-    @agent.tool_plain
-    def divide(a: float, b: float) -> float:
-        """
-        compute a / b
-        """
-        return a / b
+        run_id = orchestrator._pop_pending(ctx.tool_call_id)
+        if not run_id:
+            raise RuntimeError("Approved ReWOO tool call is missing run_id metadata")
+        result = await orchestrator.approve_and_execute(run_id=run_id)
+        return {
+            "run_id": result.run_id,
+            "status": str(result.run_status),
+            "answer": result.answer,
+            "execution_summary": getattr(result, "execution_summary", None),
+            "final_evidence": getattr(result, "final_evidence", None),
+        }
 
     return agent
 
@@ -131,56 +149,36 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--vllm-url", required=True)
     parser.add_argument("--model-config", required=True)
     args = parser.parse_args()
 
-    agent = make_agent(mcp_url=args.mcp_url)
-
+    provider = OpenAIProvider(
+        base_url=args.vllm_url,
+        api_key="EMPTY",
+    )
+    agent_model = OpenAIChatModel(
+        model_name=args.model,
+        provider=provider,
+    )
+    client = OpenAI(base_url=args.vllm_url, api_key="EMPTY")
+    orchestrator = make_default_rewoo_orchestrator(
+        mcp_url=args.mcp_url, model=args.model, client=client
+    )
+    agent = make_agent(model=agent_model, orchestrator=orchestrator)
     models = dict()
-    with open(args.model_config) as f:
-        backends = yaml.safe_load(f)["backends"]
-    for backend in backends:
-        provider = backend["provider"]
-        env_key, model_cls, provider_cls = PROVIDER_MAP[provider]
-        api_key = os.environ.get(f"{env_key}_KEY", None)
-        base_url = os.environ.get(f"{env_key}_URL", None)
-
-        if provider == "local":
-            assert (
-                base_url is not None and base_url != ""
-            ), f"Must set {env_key}_URL env var for {provider} backend"
-        else:
-            assert (
-                api_key is not None and api_key != ""
-            ), f"Must set {env_key}_KEY env var for {provider} backend"
-
-        provider = provider_cls(
-            base_url=base_url,
-            api_key=api_key,
-        )
-        models[backend["alias"]] = model_cls(
-            model_name=backend["name"],
-            provider=provider,  # type: ignore
-        )
-
-    # serve the agent with the built in dev UI
-    # this app cannot be mounted under a base path as the frontend logic hard codes some paths
-    # see: https://github.com/pydantic/pydantic-ai/issues/4156
-    # however, maybe you could instead use a subdomain?
+    models["local"] = agent_model
     rel_dir = Path(os.path.dirname(__file__))
     ui_app = agent.to_web(
         models=models,
-        html_source=rel_dir / "static/index.html",
     )
-    ag_ui_app = make_ag_ui_app(agent, models=models)
-    endpoint_app = make_endpoint_app(agent=agent, models=models)
-
+    endpoint_app = make_endpoint_app(orchestrator=orchestrator)
     app = Starlette(
         routes=[
-            Mount("/qag/endpoint", app=endpoint_app),
-            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/qag/agui", app=ag_ui_app),
-            Mount("/qag", app=ui_app),
+            Mount("/rewoo", app=endpoint_app),
+            Mount("/", app=ui_app),
         ],
     )
+
     uvicorn.run(app, host="0.0.0.0", port=args.port)

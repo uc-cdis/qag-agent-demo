@@ -15,7 +15,7 @@ services:
       - ANTHROPIC_API_KEY
       - GOOGLE_API_KEY
       - OPENAI_API_KEY
-    command: ["--port", "${AGENT_PORT}", "--mcp-url", "http://mcp:${MCP_PORT}/mcp", "--model-config", "model-config.yaml"]
+    command: ["--port", "${AGENT_PORT}", "--mcp-url", "http://mcp:${MCP_PORT}/mcp", "--vllm-url", "http://vllm:${VLLM_PORT}/v1", "--model", "openai/gpt-oss-120b", "--model-config", "model-config.yaml"]
     develop:
       watch:
         - action: sync+restart

@@ -1,16 +1,24 @@
+from __future__ import annotations
+
 import asyncio
 import inspect
 import re
-import sys
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-import requests
-from planner import PlanDag
-from pydantic import ConfigDict, ValidationError, validate_call
-from schema import GDCCohortSchema
+from _defines import SIMPLE_TOOLS
+from prompts import RESOLVER_PROMPT
+from planner import PlanDag, ExecutionKind
+from resolver import Resolver, ConstructCohortFilterArgs, StringList
+from mcp_executor import MCPExecutionBackend
+from pydantic import BaseModel, ConfigDict, ValidationError, validate_call
+
+
+class SimpleToolArgs(BaseModel):
+    a: float
+    b: float
 
 
 class NodeStatus(str, Enum):
@@ -28,7 +36,7 @@ class ExecutionResult:
     errors: dict[str, BaseException] = field(default_factory=dict)
 
 
-ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[Any]]
+# ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[Any]]
 EVIDENCE_REF_PATTERN = re.compile(r"^#E[1-9]\d*$")
 
 
@@ -56,6 +64,30 @@ class InvalidToolArgumentsError(Exception):
         super().__init__(
             f"Invalid arguments for tool {tool_name!r}: " f"{validation_error}"
         )
+
+
+def construct_cohort_filter_args(
+    project: StringList | None = None,
+    primary_site: StringList | None = None,
+    disease_type: StringList | None = None,
+    project_id: StringList | None = None,
+    sex: StringList | None = None,
+    smoking_status: StringList | None = None,
+    min_age: int | None = None,
+    max_age: int | None = None,
+) -> ConstructCohortFilterArgs:
+    args = ConstructCohortFilterArgs(
+        project=project,
+        primary_site=primary_site,
+        disease_type=disease_type,
+        project_id=project_id,
+        sex=sex,
+        min_age=min_age,
+        max_age=max_age,
+        smoking_status=smoking_status,
+    )
+
+    return args
 
 
 def resolve_evidence_refs(
@@ -156,17 +188,25 @@ class ToolExecutor:
 
 
 class Executor:
-    def __init__(self, exec_tool: ToolExecutor) -> None:
-        self.exec_tool = exec_tool
+    def __init__(
+        self,
+        rclient: Any,
+        rmodel: str,
+        rprompt: str = RESOLVER_PROMPT,
+    ) -> None:
+        self.rclient = rclient
+        self.rmodel = rmodel
+        self.rprompt = rprompt
 
-    async def execute_plan(
+    async def execute_rewoo_run(
         self,
         plan: PlanDag,
+        mcp_backend: MCPExecutionBackend,
+        token_usage: dict[str, int],
         *,
         max_concurrency: int = 8,
-    ) -> ExecutionResult:
+    ):
         dag = plan
-        exec_tool = self.exec_tool
         result = ExecutionResult(
             statuses={node: NodeStatus.PENDING for node in dag.steps}
         )
@@ -193,29 +233,48 @@ class Executor:
                     result.statuses[current] = NodeStatus.BLOCKED
                     stack.extend(dag.successors[current])
 
-        async def worker() -> None:
+        async def worker(mcp_backend: MCPExecutionBackend) -> None:
             while True:
                 node = await exec_queue.get()
-
                 try:
                     if node is None:
                         return
-
                     async with lock:
                         if result.statuses[node] != NodeStatus.PENDING:
                             continue
 
                         result.statuses[node] = NodeStatus.RUNNING
-
                     step = dag.steps[node]
-
                     try:
-                        output = await exec_tool(
-                            step.tool_name,
-                            step.tool_arguments,
-                            evidence_store=result.evidence,
+                        resolved_tool_args = resolve_evidence_refs(
+                            step.tool_args, result.evidence
                         )
-                        # print(output)
+                        if step.execution_kind == ExecutionKind.MCP:
+                            if step.executor_name in SIMPLE_TOOLS:
+                                tool_ = SIMPLE_TOOLS[step.executor_name]
+                                args_ = SimpleToolArgs(**resolved_tool_args)
+                                output = tool_(a=args_.a, b=args_.b)
+                            else:
+                                output = await mcp_backend.call_tool(
+                                    tool_name=step.executor_name,
+                                    tool_args=resolved_tool_args,
+                                )
+                        elif step.execution_kind == ExecutionKind.RESOLVER:
+                            resolved_tool_args = dict(resolved_tool_args)
+                            resolver = Resolver(
+                                client=self.rclient,
+                                model=self.rmodel,
+                            )
+                            resolver_args = construct_cohort_filter_args(
+                                **resolved_tool_args
+                            )
+                            resolver_output = await resolver.resolve(
+                                args=resolver_args, token_usage=token_usage
+                            )
+                            output = await mcp_backend.call_tool(
+                                tool_name=step.tool_name,
+                                tool_args=resolver_output,
+                            )
                     except Exception as error:
                         async with lock:
                             result.statuses[node] = NodeStatus.FAILED
@@ -240,23 +299,18 @@ class Executor:
                 finally:
                     exec_queue.task_done()
 
-        if len(dag.steps) == 0:
-            raise ValueError(f"empty plan generated, cannot execute")
         worker_count = min(
             max_concurrency,
             len(dag.steps),
         )
 
-        tasks = [asyncio.create_task(worker()) for _ in range(worker_count)]
+        tasks = [asyncio.create_task(worker(mcp_backend)) for _ in range(worker_count)]
 
         await exec_queue.join()
-
         for task in tasks:
             task.cancel()
-
         await asyncio.gather(
             *tasks,
             return_exceptions=True,
         )
-
         return result
