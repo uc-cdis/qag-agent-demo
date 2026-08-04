@@ -13,6 +13,7 @@ from _tool_var_cnv import make_cnv_tool
 from _tool_var_msi import make_msi_tool
 from _tool_var_ssm import make_ssm_tool
 from _tool_gene_expr import make_gene_expression_tools
+from _tool_survival import make_survival_tool
 # isort: on
 # fmt: on
 
@@ -36,6 +37,7 @@ get_cases_with_available_genomic_data = make_case_availability_tool(
 get_gene_expression_statistics, get_most_variably_expressed_genes = (
     make_gene_expression_tools(cache)
 )
+get_survival_data = make_survival_tool(cache)
 
 
 if __name__ == "__main__":
@@ -108,5 +110,6 @@ if __name__ == "__main__":
     mcp.add_tool(get_cases_with_available_genomic_data)
     mcp.add_tool(get_gene_expression_statistics)
     mcp.add_tool(get_most_variably_expressed_genes)
+    mcp.add_tool(get_survival_data)
 
     mcp.run(transport=args.transport)

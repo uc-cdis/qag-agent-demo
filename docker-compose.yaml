@@ -47,7 +47,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['${GPU_DEVICE_ID}']
+              device_ids: ['${CUDA_VISIBLE_DEVICES}']
               capabilities: [gpu]
     command: [
       "--model", "/model",
