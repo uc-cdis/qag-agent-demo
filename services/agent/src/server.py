@@ -150,12 +150,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
-    parser.add_argument("--model", required=True)
-    parser.add_argument("--vllm-url", required=True)
     parser.add_argument("--model-config", required=True)
+    parser.add_argument("--root-path", default="/qag")
+    parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
 
-    # --- Load model backends from config ---
     models = dict()
     with open(args.model_config) as f:
         backends = yaml.safe_load(f)["backends"]
@@ -184,7 +183,15 @@ if __name__ == "__main__":
             provider=provider_inst,  # type: ignore
         )
 
-    # --- Build orchestrator and agent (preserving existing signatures) ---
+    # replace /ROOT_PATH/ in static index.html
+    rel_dir = Path(os.path.dirname(__file__))
+    _root_path = args.root_path.rstrip("/") + "/"
+    with (
+        open(rel_dir / "static/index_base.html", "r") as f_in,
+        open(rel_dir / "static/index.html", "w") as f_out,
+    ):
+        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
+
     # Pick the first model as the default for the orchestrator
     default_alias = backends[0]["alias"]
     agent_model = models[default_alias]
@@ -198,28 +205,18 @@ if __name__ == "__main__":
     )
     agent = make_agent(model=agent_model, orchestrator=orchestrator)
 
-    # --- Replace /ROOT_PATH/ in static index.html ---
-    rel_dir = Path(os.path.dirname(__file__))
-    _root_path = args.root_path.rstrip("/") + "/"
-    with (
-        open(rel_dir / "static/index_base.html", "r") as f_in,
-        open(rel_dir / "static/index.html", "w") as f_out,
-    ):
-        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
-
-    # --- Mount apps (preserving existing signatures) ---
     ui_app = agent.to_web(
         models=models,
         html_source=rel_dir / "static/index.html",
     )
-    agui_app = make_ag_ui_app(agent=agent, models=models)
+    ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(orchestrator=orchestrator)
 
     inner = Starlette(
         routes=[
-            Mount("/rewoo", app=endpoint_app),
+            Mount("/endpoint", app=endpoint_app),
             Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/agui", app=agui_app),
+            Mount("/agui", app=ag_ui_app),
             Mount("/", app=ui_app),
         ],
     )
