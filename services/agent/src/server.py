@@ -127,9 +127,10 @@ if __name__ == "__main__":
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
     parser.add_argument("--root-path", default="/qag")
+    parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
 
-    agent = make_agent(mcp_url=args.mcp_url)
+    agent = make_agent(mcp_url=args.mcp_url, retries=args.retries)
 
     models = dict()
     with open(args.model_config) as f:
