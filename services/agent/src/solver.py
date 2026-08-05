@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from typing import Any
+
+from executor import ExecutionResult, NodeStatus
 from planner import PlanDag
 from prompts import SOLVER_PROMPT
-from executor import ExecutionResult, NodeStatus
 
 
 class Solver:

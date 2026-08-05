@@ -132,8 +132,6 @@ def gdc_query_all(
         pagination = data["pagination"]
         total = pagination["total"]
 
-        # print(f"Retrieved {len(all_hits)} / {total}", file=sys.stderr)
-
         offset += page_size
         if offset >= total:
             break

@@ -7,6 +7,7 @@ RUN yum -y update && \
 COPY services/agent/requirements.txt /requirements.txt
 RUN pip3.12 install -r /requirements.txt
 
+RUN git clone https://github.com/StevenSong/ai-chat-ui.git /build
 COPY services/agent/ /agent/
 COPY model-config.yaml /agent/src/model-config.yaml
 

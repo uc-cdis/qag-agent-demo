@@ -1,18 +1,10 @@
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Response
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent
-from pydantic_ai.messages import (
-    ModelRequest,
-    ModelResponse,
-    TextPart,
-    ThinkingPart,
-    ToolCallPart,
-    ToolReturnPart,
-)
-from pydantic_core import to_json
 from orchestrator import RewooOrchestrator
+from pydantic import BaseModel, Field
+from pydantic_core import to_json
+
 
 class InvokeRequest(BaseModel):
     query: str
@@ -38,7 +30,6 @@ def make_endpoint_app(*, orchestrator: RewooOrchestrator):
         }
         body = to_json(payload, fallback=str)
         return Response(content=body, media_type="application/json")
-    
 
     @app.get("/health")
     async def health():

@@ -9,6 +9,7 @@ At its core, this demo relies on a strong, general-purpose, reasoning LLM and an
     1. [Modularization and Reusable Components](#modularization-and-reusable-components)
     1. [MCP Design Considerations](#mcp-design-considerations)
     1. [Making Minimal Changes](#making-minimal-changes)
+1. [Integrating ReWOO](#intergrating-rewoo)
 1. [Running the Demo](#running-the-demo)
 1. [Limitations](#local-llm-agent-limitations)
 
@@ -64,6 +65,28 @@ When making changes to an MCP toolset, consider the [design principles](#mcp-des
 * the tool description
 * the parameter description
 * the error handling
+
+## Integrating ReWOO
+
+This repo now supports two ways of working, BYOA (Bring Your Own Agent) or a ReWOO style agentic workflow hence preserving the old MCP compatibility and also providing an efficient paradigm for accurate variant statistics.
+
+ReWOO (**Re**asoning **W**ith**O**ut **O**bservtion) is a modular paradigm that detaches the reasoning process in Augmented Language Models (ALMs: Blend of LLM reasoning and external tools for knowledge retrieval and action execution) from external observations, significantly reducing token consumption. ReWOO describes a paradigm of 3 modules; Planner, Worker and Solver. We adapt ReWOO style modules into our exisitng MCP design to achieve significant reduction in token consumption. 
+
+Concretely, we make use of Planner, Executor and Solver modules all wrapped by a thin orchestrator to keep the QAG functionality and achieve better token efficiency (volume of tokens needed to maintain performance)
+
+### Planner
+Planner is a single call to the LLM to consume a description of the MCP tools, the stated user query and produce a plan artifact that is a solution blueprint. It contains succesive tuples of (Plan, Evidence) where the Plan represents a descriptive message of the current step and Evidence is a reference to an object representing the work done by a worker in the executor. Planner also compiles the generated Plan into a DAG object for stateful execution.
+
+### Executor
+Executor does the bulk of the ReWOO workflow of actually running the planned steps and generating the associated evidences. The DAG compiled from the Plan is used to execute nodes in topological sort order via the dedicated and appropriate execution pathways.
+
+### Solver
+Simplest step of ReWOO, uses the generated Plan and Evidences to summarize the work done and answer the original user query via a standarad prompt.
+
+## ReWOO Architecture
+The overall architecture of agentic QAG with ReWOO is diagramed in this figure:
+
+![QAG ReWOO v3.0 Agentic Architecture](static/2026-08-05%20QAG%20Agent%20Demo%20v3.0.png)
 
 ## Running the Demo
 

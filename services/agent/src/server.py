@@ -1,10 +1,11 @@
 import argparse
 import os
-import uvicorn
-
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
+import uvicorn
+from openai import OpenAI
+from orchestrator import make_default_rewoo_orchestrator
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -12,8 +13,6 @@ from pydantic_ai import (
     DeferredToolRequests,
     RunContext,
 )
-from openai import OpenAI
-from orchestrator import make_default_rewoo_orchestrator
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -47,10 +46,10 @@ PROVIDER_MAP: dict[
     ),  # assume local is using OpenAI compatible API
 }
 
+
 class ApprovalMetadata(TypedDict, total=False):
     run_id: str
     user_feedback: str
-
 
 
 def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
@@ -86,7 +85,7 @@ def make_agent(
     *,
     model: str | Any,
     orchestrator: Any,
-    retries: int = 1,
+    retries: int = 0,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
@@ -97,8 +96,8 @@ def make_agent(
             "You are a light user-facing controller for a ReWOO bioinformatics "
             "workflow over Genomic Data Commons data.\n\n"
             "Never write plans, cohort definitions, or GDC queries as prose."
-            "To help the user, your only option is to call start_rewoo(user_query=...)." 
-            "That tool will draft the plan and return it for approval — the UI will show the plan and approve/deny buttons." 
+            "To help the user, your only option is to call start_rewoo(user_query=...)."
+            "That tool will draft the plan and return it for approval — the UI will show the plan and approve/deny buttons."
             "Do not narrate what you're about to do; just call the tool."
         ),
         max_concurrency=ConcurrencyLimit(
@@ -112,10 +111,11 @@ def make_agent(
         ctx: RunContext,
         user_query: str,
     ) -> dict[str, Any]:
+        """single rewoo entry tool with approval gate baked in"""
         if not ctx.tool_call_approved:
             pending = await orchestrator.create_plan(user_query)
             orchestrator._register_pending(ctx.tool_call_id, pending.run_id)
-            
+
             raise ApprovalRequired(
                 metadata={
                     "approval_kind": "rewoo_plan",
@@ -130,7 +130,7 @@ def make_agent(
                 }
             )
 
-        run_id = orchestrator._pop_pending(ctx.tool_call_id)
+        run_id = orchestrator._get_pending(ctx.tool_call_id)
         if not run_id:
             raise RuntimeError("Approved ReWOO tool call is missing run_id metadata")
         result = await orchestrator.approve_and_execute(run_id=run_id)
@@ -170,12 +170,12 @@ if __name__ == "__main__":
     models = dict()
     models["local"] = agent_model
     rel_dir = Path(os.path.dirname(__file__))
-    ui_app = agent.to_web(
-        models=models,
-    )
+    ui_app = agent.to_web(models=models, html_source=rel_dir / "static/index.html")
+    agui_app = make_ag_ui_app(agent=agent, models=models)
     endpoint_app = make_endpoint_app(orchestrator=orchestrator)
     app = Starlette(
         routes=[
+            Mount("/agui", app=agui_app),
             Mount("/rewoo", app=endpoint_app),
             Mount("/", app=ui_app),
         ],

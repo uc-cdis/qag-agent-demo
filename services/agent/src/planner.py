@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import re
-from enum import Enum
-from typing import Any, Optional
-from dataclasses import dataclass
-from prompts import PLANNER_PROMPT
-from _tool_desc import TOOLS_DESCRIPTION
 from collections import defaultdict
 from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Optional
 
-from pydantic import BaseModel, ValidationError, ConfigDict, Field
+from _tool_desc import TOOLS_DESCRIPTION
+from prompts import PLANNER_PROMPT
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 
 class EvidenceReference(BaseModel):
@@ -146,6 +146,12 @@ def compile_step(step: PlannerStep) -> CompiledStep:
 
 
 class Planner:
+    """
+    ReWOO planning module.
+    Input: Natual language user query
+    Output: A directed acyclic graph structured object with plan steps
+    """
+
     def __init__(
         self,
         *,
@@ -167,6 +173,7 @@ class Planner:
         user_query: str,
         token_usage: dict[str, int],
     ) -> PlannerResponse:
+        """produces a plan to address the user query via a structured outputs call to the LLM"""
         self.user_query = user_query
         prompt = self.prompt.format(tool_description=self.tools, task=user_query)
         result = self.client.chat.completions.create(
@@ -181,9 +188,12 @@ class Planner:
                 }
             },
         )
+        # naive token accounting
         token_usage["input_tokens"] += result.usage.prompt_tokens
         token_usage["output_tokens"] += result.usage.completion_tokens
         token_usage["total_tokens"] += result.usage.total_tokens
+
+        # response validation
         content = result.choices[0].message.content
         if content is None:
             raise ValueError("Planner returned empty")
@@ -193,6 +203,7 @@ class Planner:
             raise ValueError(f"Planner returned invalid structured output: {e}") from e
 
     def compile_dag(self, plan: PlannerResponse) -> PlanDag:
+        """compiles a simple dag like object over the plan steps with evidences serving as dependency indicators"""
         steps = {step.evidence_id: step for step in plan.steps}
         compiled_steps = {step.evidence_id: compile_step(step) for step in plan.steps}
         if len(steps) != len(plan.steps):
@@ -237,10 +248,9 @@ class Planner:
 
     @staticmethod
     def _validate_acyclic(successors, in_degree) -> None:
+        """simple cycle checking in a dag"""
         remaining = dict(in_degree)
-
         queue = [node for node, degree in remaining.items() if degree == 0]
-
         visited = 0
         while queue:
             node = queue.pop()
@@ -254,11 +264,3 @@ class Planner:
 
         if visited != len(remaining):
             raise ValueError("Plan DAG contains a cycle")
-
-
-def main():
-    return
-
-
-if __name__ == "__main__":
-    main()

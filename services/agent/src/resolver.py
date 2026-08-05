@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from typing import Any, Annotated
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
-from prompts import RESOLVER_PROMPT
+from typing import Annotated, Any
+
 from _defines import FIELD_REGISTRY, VALUE_REGISTRY
+from prompts import RESOLVER_PROMPT
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 
 def normalize_string_list(value: object) -> list[str] | None:
+    """helper to ensure correct formatting for cohort args"""
     if value is None:
         return None
 
@@ -58,6 +60,10 @@ class ResolverResponse(BaseModel):
 
 
 class Resolver:
+    """
+    simple class to resolve cohort filter generation using simple LLM calls
+    """
+
     def __init__(
         self,
         client: Any,
@@ -77,6 +83,7 @@ class Resolver:
         args: ConstructCohortFilterArgs,
         token_usage: dict[str, int],
     ) -> Any:
+        """takes the input fields and match with exact GDC specific fields and values using LLM calls"""
         supplied_fields = {
             field: value
             for field, value in args.model_dump().items()
@@ -84,6 +91,7 @@ class Resolver:
         }
         resolved_fields: dict[str, Any] = {}
 
+        # loop through fields and match it
         for field, value in supplied_fields.items():
             if field in {"min_age", "max_age"} and value:
                 resolved_fields[field] = int(value * 365)
@@ -119,6 +127,7 @@ class Resolver:
                     }
                 },
             )
+            # naive token accounting
             token_usage["input_tokens"] += response.usage.prompt_tokens
             token_usage["output_tokens"] += response.usage.completion_tokens
             token_usage["total_tokens"] += response.usage.total_tokens

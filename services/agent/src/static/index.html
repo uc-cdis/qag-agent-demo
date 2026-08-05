@@ -1,473 +1,236 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GDC QAG ReWOO</title>
 
-  <title>GDC ReWOO QAG</title>
+    <link rel="icon" type="image/svg+xml" href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/favicon.png" />
 
-  <!-- Must match your Starlette mount:
-       Mount("/rewoo/assets", StaticFiles(directory=rel_dir / "static/assets"))
-  -->
-  <script type="module" crossorigin src="/rewoo/assets/index.js"></script>
-  <link rel="stylesheet" crossorigin href="/rewoo/assets/index.css">
+    <script type="module" crossorigin src="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-BN5f5YQq.js"></script>
+    <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/npm/@pydantic/ai-chat-ui/dist/assets/index-B3O1eTMb.css">
 
-  <style>
-    #examples-box {
-      margin: 12px auto 0;
-      max-width: 1000px;
-      padding: 14px 18px;
-      border: 1.5px solid #cacaca;
-      border-radius: 12px;
-      background: #ffffff;
-    }
-
-    #examples-box p {
-      margin: 0 0 10px;
-      font-size: 13px;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    #examples-box .chips {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    #examples-box button {
-      display: block;
-      width: 100%;
-      text-align: left;
-      padding: 10px 14px;
-      border-radius: 999px;
-      border: 1px solid #cacaca;
-      background: #f9fafb;
-      color: #374151;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    #examples-box button:hover {
-      background: #f0fdf4;
-      color: #111827;
-    }
-
-    .rewoo-plan-card {
-      margin: 12px 0;
-      padding: 14px 16px;
-      border: 1.5px solid #cacaca;
-      border-radius: 12px;
-      background: #ffffff;
-      max-width: 1000px;
-    }
-
-    .rewoo-plan-card h2 {
-      margin: 0 0 8px;
-      font-size: 18px;
-      color: #111827;
-    }
-
-    .rewoo-plan-card p {
-      margin: 0 0 10px;
-      color: #4b5563;
-      font-size: 14px;
-    }
-
-    .rewoo-plan-meta {
-      margin: 10px 0;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 13px;
-      color: #374151;
-    }
-
-    .rewoo-plan-meta code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 12px;
-    }
-
-    .rewoo-plan-step {
-      margin: 8px 0;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-    }
-
-    .rewoo-plan-step-header {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 6px;
-      color: #6b7280;
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .rewoo-plan-step-title {
-      margin: 0;
-      color: #111827;
-      font-size: 14px;
-      font-weight: 600;
-    }
-
-    .rewoo-plan-step-details {
-      margin-top: 6px;
-      color: #374151;
-      font-size: 12px;
-    }
-
-    .rewoo-plan-step-details code {
-      display: inline-block;
-      max-width: 100%;
-      overflow-wrap: anywhere;
-      padding: 2px 5px;
-      border-radius: 6px;
-      background: #ffffff;
-      border: 1px solid #e5e7eb;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 11px;
-    }
-
-    .rewoo-approval-help {
-      margin-top: 12px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      color: #14532d;
-      font-size: 14px;
-    }
-  </style>
-</head>
-
-<body>
-  <div id="root"></div>
-
-  <script>
-    const SUGGESTIONS = [
-      "What is the prevalence of BRAF SSMs in lung cancer?",
-      "What is the prevalence of BRAF SSMs in lung cancer cases of non smoking women over 40?",
-      "What is the average gene expression for TP53 and MUC16 in cases with lung adenocarcinoma?",
-      "What is the average gene expression of BRAF in TCGA-BRCA?",
-      "List the most variably expressed genes in APOLLO-LUAD.",
-      "Compare the expression of TP53, MUC16, and BRAF in APOLLO-LUAD."
-    ];
-
-    const PLACEHOLDER_W_EX =
-      "Ask me a question about GDC data — example questions are available below.";
-
-    const PLACEHOLDER_NO_EX =
-      "Ask me a question about GDC data.";
-
-    function isIndexRoute() {
-      const segments = window.location.pathname.split("/").filter(Boolean);
-
-      // /rewoo -> ["rewoo"]
-      // /rewoo/<conversation-id> -> ["rewoo", "<conversation-id>"]
-      return segments.length <= 1;
-    }
-
-    function removeBox() {
-      const box = document.getElementById("examples-box");
-      if (box) box.remove();
-    }
-
-    function injectBox(textarea) {
-      const existing = document.getElementById("examples-box");
-      if (existing) existing.remove();
-
-      const box = document.createElement("div");
-      box.id = "examples-box";
-
-      const label = document.createElement("p");
-      label.textContent = "Example Questions";
-      box.appendChild(label);
-
-      const chips = document.createElement("div");
-      chips.className = "chips";
-      box.appendChild(chips);
-
-      SUGGESTIONS.forEach(text => {
-        const btn = document.createElement("button");
-        btn.textContent = text;
-
-        btn.addEventListener("click", () => {
-          const nativeSetter = Object.getOwnPropertyDescriptor(
-            window.HTMLTextAreaElement.prototype,
-            "value"
-          ).set;
-
-          nativeSetter.call(textarea, text);
-          textarea.dispatchEvent(new Event("input", { bubbles: true }));
-          textarea.focus();
-
-          const sendBtn =
-            document.querySelector("button[type='submit']") ||
-            document.querySelector("form button:last-of-type");
-
-          if (sendBtn) sendBtn.click();
-        });
-
-        chips.appendChild(btn);
-      });
-
-      const form = textarea.closest("form");
-      const formParent = form && form.parentElement;
-
-      if (formParent && formParent.parentElement) {
-        formParent.parentElement.insertBefore(box, formParent.nextSibling);
-      } else {
-        document.body.appendChild(box);
+    <style>
+      #examples-box {
+        margin: 12px auto 0;
+        max-width: 1000px;
+        padding: 14px 18px;
+        border: 1.5px solid #cacaca;
+        border-radius: 12px;
+        background: #ffffff;
       }
 
-      return box;
-    }
-
-    function tryParseJson(text) {
-      if (!text || typeof text !== "string") return null;
-
-      const trimmed = text.trim();
-      const candidates = [trimmed];
-
-      const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-      if (fenced) candidates.push(fenced[1].trim());
-
-      const firstBrace = trimmed.indexOf("{");
-      const lastBrace = trimmed.lastIndexOf("}");
-      if (firstBrace >= 0 && lastBrace > firstBrace) {
-        candidates.push(trimmed.slice(firstBrace, lastBrace + 1));
+      #examples-box p {
+        margin: 0 0 10px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
       }
 
-      for (const candidate of candidates) {
-        try {
-          return JSON.parse(candidate);
-        } catch (_) {}
+      #examples-box .chips {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
-      return null;
-    }
-
-    function normalizeApprovalPayload(raw) {
-      if (!raw || typeof raw !== "object") return null;
-
-      if (raw.approval_kind === "rewoo_plan") {
-        return raw;
+      #examples-box button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid #cacaca;
+        background: #f9fafb;
+        color: #374151;
+        font-size: 14px;
+        font-family: inherit;
+        cursor: pointer;
       }
 
-      if (
-        raw.metadata &&
-        typeof raw.metadata === "object" &&
-        raw.metadata.approval_kind === "rewoo_plan"
-      ) {
-        return raw.metadata;
+      #examples-box button:hover {
+        background: #f0fdf4;
+        color: #111827;
       }
 
-      if (
-        raw.tool_call_metadata &&
-        typeof raw.tool_call_metadata === "object" &&
-        raw.tool_call_metadata.approval_kind === "rewoo_plan"
-      ) {
-        return raw.tool_call_metadata;
-      }
-
-      return null;
-    }
-
-    function renderPlanStep(step, index) {
-      const div = document.createElement("div");
-      div.className = "rewoo-plan-step";
-
-      const header = document.createElement("div");
-      header.className = "rewoo-plan-step-header";
-
-      const left = document.createElement("span");
-      left.textContent = step.evidence_id || `Step ${index + 1}`;
-
-      const right = document.createElement("span");
-      right.textContent = [
-        step.execution_kind,
-        step.executor_name || step.tool_name
-      ].filter(Boolean).join(" · ");
-
-      header.appendChild(left);
-      header.appendChild(right);
-      div.appendChild(header);
-
-      const title = document.createElement("p");
-      title.className = "rewoo-plan-step-title";
-      title.textContent = step.plan || step.description || `Step ${index + 1}`;
-      div.appendChild(title);
-
-      const details = document.createElement("div");
-      details.className = "rewoo-plan-step-details";
-
-      if (step.tool_name) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Tool:</strong> <code></code>";
-        row.querySelector("code").textContent = step.tool_name;
-        details.appendChild(row);
-      }
-
-      if (step.tool_args) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Args:</strong> <code></code>";
-        row.querySelector("code").textContent = JSON.stringify(step.tool_args);
-        details.appendChild(row);
-      }
-
-      if (step.predecessors && step.predecessors.length) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Depends on:</strong> <code></code>";
-        row.querySelector("code").textContent = step.predecessors.join(", ");
-        details.appendChild(row);
-      }
-
-      div.appendChild(details);
-      return div;
-    }
-
-    function renderApprovalCard(payload) {
-      const card = document.createElement("div");
-      card.className = "rewoo-plan-card";
-
-      const title = document.createElement("h2");
-      title.textContent = "ReWOO plan drafted";
-      card.appendChild(title);
-
-      const subtitle = document.createElement("p");
-      subtitle.textContent = "Review this plan before approving execution.";
-      card.appendChild(subtitle);
-
-      const meta = document.createElement("div");
-      meta.className = "rewoo-plan-meta";
-
-      if (payload.run_id) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Run ID:</strong> <code></code>";
-        row.querySelector("code").textContent = payload.run_id;
-        meta.appendChild(row);
-      }
-
-      if (payload.query) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Query:</strong> <span></span>";
-        row.querySelector("span").textContent = payload.query;
-        meta.appendChild(row);
-      }
-
-      if (payload.status) {
-        const row = document.createElement("div");
-        row.innerHTML = "<strong>Status:</strong> <span></span>";
-        row.querySelector("span").textContent = payload.status;
-        meta.appendChild(row);
-      }
-
-      card.appendChild(meta);
-
-      const plan = payload.plan || payload.plan_summary || payload.draft_plan;
-
-      if (Array.isArray(plan)) {
-        plan.forEach((step, index) => {
-          if (typeof step === "object" && step !== null) {
-            card.appendChild(renderPlanStep(step, index));
-          } else {
-            card.appendChild(renderPlanStep({ plan: String(step) }, index));
-          }
-        });
-      } else if (plan) {
-        const pre = document.createElement("pre");
-        pre.textContent =
-          typeof plan === "string" ? plan : JSON.stringify(plan, null, 2);
-        card.appendChild(pre);
-      }
-
-      const help = document.createElement("div");
-      help.className = "rewoo-approval-help";
-      help.textContent =
-        "Approve this tool request to execute the workflow. To revise, deny the request and send your feedback as the next message.";
-
-      card.appendChild(help);
-
-      return card;
-    }
-
-    function enhanceApprovalBlocks() {
-      const candidates = Array.from(
-        document.querySelectorAll("pre, code, div, section, article")
-      );
-
-      for (const candidate of candidates) {
-        if (candidate.dataset.rewooEnhanced === "true") continue;
-
-        const text = candidate.textContent || "";
-
-        if (!text.includes("rewoo_plan") && !text.includes("approval_kind")) {
-          continue;
+      @media (prefers-color-scheme: dark) {
+        #examples-box {
+          border-color: #3f3f46;
+          background: transparent;
         }
 
-        const raw = tryParseJson(text);
-        const payload = normalizeApprovalPayload(raw);
+        #examples-box button {
+          border-color: #3f3f46;
+          background: #18181b;
+          color: #d4d4d8;
+        }
 
-        if (!payload) continue;
-
-        candidate.dataset.rewooEnhanced = "true";
-
-        const card = renderApprovalCard(payload);
-
-        const container =
-          candidate.closest("li") ||
-          candidate.closest("article") ||
-          candidate.parentElement;
-
-        if (!container) continue;
-        if (container.querySelector(".rewoo-plan-card")) continue;
-
-        container.appendChild(card);
+        #examples-box button:hover {
+          background: #27272a;
+          color: #fafafa;
+        }
       }
-    }
+    </style>
+  </head>
 
-    let examplesInjected = false;
+  <body>
+    <div id="root"></div>
 
-    const observer = new MutationObserver(() => {
-      const h1 = document.querySelector("h1");
-      if (h1 && h1.textContent !== "🧬 GDC ReWOO QAG 🔬") {
-        h1.textContent = "🧬 GDC ReWOO QAG 🔬";
+    <script>
+      const SUGGESTIONS = [
+        "What is the prevalence of BRAF SSMs in lung cancer?",
+        "What is the prevalence of BRAF SSMs in lung cancer cases of non smoking women over 40?",
+        "What is the average gene expression for TP53 and MUC16 in cases with lung adenocarcinoma?",
+        "What is the average gene expression of BRAF in TCGA-BRCA?",
+        "List the most variably expressed genes in APOLLO-LUAD.",
+        "Compare the expression of TP53, MUC16, and BRAF in APOLLO-LUAD."
+      ];
+
+      const PLACEHOLDER_EMPTY =
+        "Ask me a question about GDC data — example questions are available below.";
+
+      const PLACEHOLDER_STARTED =
+        "Ask me a question about GDC data.";
+
+      // The chat UI is a React app, so plain `.value = x` is ignored. Use the
+      // native setter and fire an input event the framework will notice.
+      function setInputValue(input, text) {
+        const proto =
+          input.tagName === "TEXTAREA"
+            ? window.HTMLTextAreaElement.prototype
+            : window.HTMLInputElement.prototype;
+
+        const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+        setter.call(input, text);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
       }
 
-      const textarea = document.querySelector("textarea");
-      const bare = isIndexRoute();
+      function findInput() {
+        return document.querySelector("textarea, input[type='text']");
+      }
 
-      if (textarea) {
-        textarea.setAttribute(
-          "placeholder",
-          bare ? PLACEHOLDER_W_EX : PLACEHOLDER_NO_EX
+      function submit(input) {
+        const form = input.closest("form");
+
+        const sendBtn =
+          (form &&
+            (form.querySelector("button[type='submit']") ||
+              form.querySelector("button:last-of-type"))) ||
+          document.querySelector("button[type='submit']");
+
+        if (sendBtn && !sendBtn.disabled) {
+          sendBtn.click();
+          return;
+        }
+
+        // Fallback: most chat composers send on plain Enter.
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            code: "Enter",
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+          })
         );
       }
 
-      enhanceApprovalBlocks();
+      let conversationStarted = false;
 
-      if (!bare) {
-        removeBox();
-        examplesInjected = false;
-        return;
+      function removeBox() {
+        const box = document.getElementById("examples-box");
+        if (box) box.remove();
       }
 
-      if (!textarea || examplesInjected) return;
+      function buildBox(input) {
+        const box = document.createElement("div");
+        box.id = "examples-box";
 
-      examplesInjected = true;
-      injectBox(textarea);
-    });
+        const label = document.createElement("p");
+        label.textContent = "Example Questions";
+        box.appendChild(label);
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
-  </script>
-</body>
+        const chips = document.createElement("div");
+        chips.className = "chips";
+        box.appendChild(chips);
+
+        SUGGESTIONS.forEach(text => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = text;
+
+          btn.addEventListener("click", () => {
+            const live = findInput() || input;
+            setInputValue(live, text);
+            live.focus();
+            // Let React flush the state update before submitting.
+            setTimeout(() => submit(live), 50);
+            markStarted();
+          });
+
+          chips.appendChild(btn);
+        });
+
+        return box;
+      }
+
+      function injectBox(input) {
+        if (document.getElementById("examples-box")) return;
+
+        const box = buildBox(input);
+        const form = input.closest("form");
+        const anchor = (form && form.parentElement) || input.parentElement;
+
+        if (anchor && anchor.parentElement) {
+          anchor.parentElement.insertBefore(box, anchor.nextSibling);
+        } else {
+          document.body.appendChild(box);
+        }
+      }
+
+      function markStarted() {
+        conversationStarted = true;
+        removeBox();
+
+        const input = findInput();
+        if (input) input.setAttribute("placeholder", PLACEHOLDER_STARTED);
+      }
+
+      // Hide the examples once the user actually sends something, however they
+      // send it: clicking the chips, hitting Enter, or clicking the send button.
+      document.addEventListener("submit", markStarted, true);
+
+      document.addEventListener(
+        "keydown",
+        event => {
+          const input = findInput();
+          if (!input || event.target !== input) return;
+          if (event.key !== "Enter" || event.shiftKey) return;
+          if (!input.value.trim()) return;
+          markStarted();
+        },
+        true
+      );
+
+      const observer = new MutationObserver(() => {
+        const input = findInput();
+        if (!input) return;
+
+        input.setAttribute(
+          "placeholder",
+          conversationStarted ? PLACEHOLDER_STARTED : PLACEHOLDER_EMPTY
+        );
+
+        if (conversationStarted) {
+          removeBox();
+        } else {
+          injectBox(input);
+        }
+      });
+
+      observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+  </body>
 </html>
