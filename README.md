@@ -84,11 +84,38 @@ hf download openai/gpt-oss-120b --local-dir /path/to/save/local/weights
 ### Configuration
 There are 2 important pieces of configuration to update prior to running:
 
-`model-config.yaml`: which LLM backends to use with the agent. Third-party model providers defined here need corresponding entries in `.env` for their API key. You can specify multiple models from the same provider. We currently support the following providers:
-* `local` (via `vLLM`)
+`model-config.yaml`: which LLM backends to use with the agent. Each backend defines its own `env_prefix`, which maps to a pair of `.env` variables (`{ENV_PREFIX}_URL` and `{ENV_PREFIX}_KEY`). This allows you to connect multiple instances of the same provider type (e.g., two different OpenAI-compatible proxies) without any code changes. We currently support the following provider types:
+* `openai` (OpenAI-compatible API)
 * `anthropic`
 * `google`
-* `openai`
+* `local` (via `vLLM`, uses OpenAI-compatible API)
+
+<details>
+<summary>Example <code>model-config.yaml</code></summary>
+
+```yaml
+backends:
+  - provider: openai
+    name: openai.gpt-oss-120b
+    alias: (Bedrock) GPT OSS 120B
+    env_prefix: BEDROCK_GPT_API
+  - provider: openai
+    name: zai.glm-4.7-flash
+    alias: (Bedrock) Z.ai GLM 4.7 Flash
+    env_prefix: BEDROCK_GLM_API
+  - provider: openai
+    name: openai/gpt-oss-120b
+    alias: (On-Prem) GPT OSS 120B
+    env_prefix: ONPREM_API
+```
+
+Each backend's `env_prefix` tells the agent which environment variables to read for that backend. In the example above, the agent will look for:
+* `BEDROCK_API_URL` and `BEDROCK_API_KEY` (shared by Bedrock GPT and GLM)
+* `ONPREM_API_URL` and `ONPREM_API_KEY`
+
+If two backends share the same proxy and credentials, they can use the same `env_prefix`.
+
+</details>
 
 `.env`: environment variables defining local file paths, ports, and secrets
 <details>
@@ -100,6 +127,14 @@ VLLM_PORT=8001
 MCP_PORT=8002
 GPU_DEVICE_ID=0
 LOCAL_MODEL_WEIGHTS=/path/to/saved/local/weights
+
+# Each env_prefix from model-config.yaml needs a corresponding _URL and _KEY pair:
+# BEDROCK_API_URL=https://bedrock-proxy.example.com/v1
+# BEDROCK_API_KEY=sk-...
+# ONPREM_API_URL=http://onprem-gateway.local/v1
+# ONPREM_API_KEY=sk-...
+
+# Legacy single-provider shorthand (still works with a single backend):
 # ANTHROPIC_API_KEY=foo
 # GOOGLE_API_KEY=bar
 # OPENAI_API_KEY=baz

@@ -1,43 +1,66 @@
 import argparse
 import os
+import sys
+from pathlib import Path
 
 import uvicorn
 import yaml
 from pydantic_ai import Agent, ConcurrencyLimit
-from pydantic_ai.mcp import MCPServerStreamableHTTP
+from pydantic_ai.mcp import MCPToolset, StreamableHttpTransport
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.ui.ag_ui import AGUIAdapter
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.requests import Request
+from starlette.responses import Response
+from starlette.routing import Mount, Route
+from starlette.staticfiles import StaticFiles
 
 from _endpoint import make_endpoint_app  # isort: skip
-
 
 PROVIDER_MAP: dict[
     str,
     tuple[
-        str,  # env var prefix, suffix with _KEY or _URL
         type[AnthropicModel | GoogleModel | OpenAIChatModel],
         type[AnthropicProvider | GoogleProvider | OpenAIProvider],
     ],
 ] = {
-    "anthropic": ("ANTHROPIC_API", AnthropicModel, AnthropicProvider),
-    "google": ("GOOGLE_API", GoogleModel, GoogleProvider),
-    "openai": ("OPENAI_API", OpenAIChatModel, OpenAIProvider),
+    "anthropic": (AnthropicModel, AnthropicProvider),
+    "google": (GoogleModel, GoogleProvider),
+    "openai": (OpenAIChatModel, OpenAIProvider),
     "local": (
-        "LOCAL_API",
         OpenAIChatModel,
         OpenAIProvider,
     ),  # assume local is using OpenAI compatible API
 }
 
-# NOTE: if you want to switch to the newer OpenAI responses API (with OpenAIResponsesModel),
-# you may need to do some patching of the response stream for the pydantic AI model client implementation
-# see this prior commit as a reference: https://github.com/StevenSong/qag-agent-demo/blob/79ff198623fd2fc0025e383c323cd526a75684a0/agent/agent.py
+
+def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
+    async def run_ag_ui(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        requested_model_alias = body.get("model")
+        selected_model = models.get(requested_model_alias)
+
+        if not selected_model and models:
+            default_alias = next(iter(models.keys()))
+            selected_model = models[default_alias]
+            print(
+                f"Warning: Model '{requested_model_alias}' not found. Falling back to '{default_alias}'."
+            )
+
+        return await AGUIAdapter.dispatch_request(
+            request, agent=agent, model=selected_model
+        )
+
+    return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
 
 
 def make_agent(
@@ -46,7 +69,10 @@ def make_agent(
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
-    mcp_server = MCPServerStreamableHTTP(mcp_url)
+    mcp_server = MCPToolset(
+        StreamableHttpTransport(mcp_url),
+        include_instructions=True,
+    )
 
     agent = Agent(
         toolsets=[mcp_server],
@@ -92,10 +118,6 @@ def make_agent(
         """
         return a / b
 
-    @agent.instructions
-    async def mcp_server_instructions():
-        return mcp_server.instructions
-
     return agent
 
 
@@ -104,51 +126,64 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
+    parser.add_argument("--root-path", default="/qag")
+    parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
 
-    agent = make_agent(mcp_url=args.mcp_url)
+    agent = make_agent(mcp_url=args.mcp_url, retries=args.retries)
 
     models = dict()
     with open(args.model_config) as f:
         backends = yaml.safe_load(f)["backends"]
     for backend in backends:
-        provider = backend["provider"]
-        env_key, model_cls, provider_cls = PROVIDER_MAP[provider]
-        api_key = os.environ.get(f"{env_key}_KEY", None)
-        base_url = os.environ.get(f"{env_key}_URL", None)
+        provider_type = backend["provider"]
+        env_prefix = backend["env_prefix"]
+        model_cls, provider_cls = PROVIDER_MAP[provider_type]
+        api_key = os.environ.get(f"{env_prefix}_KEY", None)
+        base_url = os.environ.get(f"{env_prefix}_URL", None)
 
-        if provider == "local":
+        if provider_type == "local":
             assert (
                 base_url is not None and base_url != ""
-            ), f"Must set {env_key}_URL env var for {provider} backend"
+            ), f"Must set {env_prefix}_URL env var for {provider_type} backend"
         else:
             assert (
                 api_key is not None and api_key != ""
-            ), f"Must set {env_key}_KEY env var for {provider} backend"
+            ), f"Must set {env_prefix}_KEY env var for {provider_type} backend"
 
-        provider = provider_cls(
+        provider_inst = provider_cls(
             base_url=base_url,
             api_key=api_key,
         )
         models[backend["alias"]] = model_cls(
             model_name=backend["name"],
-            provider=provider,  # type: ignore
+            provider=provider_inst,  # type: ignore
         )
 
+    # replace /ROOT_PATH/ in static index.html
+    rel_dir = Path(os.path.dirname(__file__))
+    _root_path = args.root_path.rstrip("/") + "/"
+    with (
+        open(rel_dir / "static/index_base.html", "r") as f_in,
+        open(rel_dir / "static/index.html", "w") as f_out,
+    ):
+        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
+
     # serve the agent with the built in dev UI
-    # this app cannot be mounted under a base path as the frontend logic hard codes some paths
-    # see: https://github.com/pydantic/pydantic-ai/issues/4156
-    # however, maybe you could instead use a subdomain?
-    rel_dir = os.path.dirname(__file__)
     ui_app = agent.to_web(
         models=models,
-        html_source=os.path.join(rel_dir, "static/index.html"),
+        html_source=rel_dir / "static/index.html",
     )
+    ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
-    app = Starlette(
+
+    inner = Starlette(
         routes=[
             Mount("/endpoint", app=endpoint_app),
+            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/agui", app=ag_ui_app),
             Mount("/", app=ui_app),
         ],
     )
+    app = Starlette(routes=[Mount(args.root_path, app=inner)])
     uvicorn.run(app, host="0.0.0.0", port=args.port)
