@@ -1,16 +1,5 @@
 backends:
-  - provider: local
+  - provider: openai
     name: openai/gpt-oss-120b
     alias: (On-Prem) GPT OSS 120B
-  # - provider: anthropic
-  #   name: claude-sonnet-4-6
-  #   alias: Claude Sonnet 4.6
-  # - provider: anthropic
-  #   name: claude-opus-4-7
-  #   alias: Claude Opus 4.7
-  # - provider: google
-  #   name: gemini-3.1-pro-preview
-  #   alias: Gemini 3.1 Pro
-  # - provider: openai
-  #   name: gpt-5.5
-  #   alias: GPT 5.5
+    env_prefix: ONPREM_API
