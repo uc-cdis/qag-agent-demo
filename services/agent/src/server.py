@@ -157,7 +157,6 @@ if __name__ == "__main__":
         base_url = os.environ.get(f"{env_prefix}_URL", None)
 
         if provider_type == "local":
-        if provider_type == "local":
             assert (
                 base_url is not None and base_url != ""
             ), f"Must set {env_prefix}_URL env var for {provider_type} backend"
@@ -174,15 +173,6 @@ if __name__ == "__main__":
             model_name=backend["name"],
             provider=provider_inst,  # type: ignore
         )
-
-    # replace /ROOT_PATH/ in static index.html
-    rel_dir = Path(os.path.dirname(__file__))
-    _root_path = args.root_path.rstrip("/") + "/"
-    with (
-        open(rel_dir / "static/index_base.html", "r") as f_in,
-        open(rel_dir / "static/index.html", "w") as f_out,
-    ):
-        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
 
     # replace /ROOT_PATH/ in static index.html
     rel_dir = Path(os.path.dirname(__file__))
