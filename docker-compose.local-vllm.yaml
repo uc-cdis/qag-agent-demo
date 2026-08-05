@@ -1,0 +1,73 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: services/agent/Dockerfile
+    depends_on:
+      wait-for-mcp:
+        condition: service_completed_successfully
+      wait-for-vllm:
+        condition: service_completed_successfully
+    ports:
+      - "${AGENT_PORT}:${AGENT_PORT}"
+    environment:
+      - ONPREM_API_URL=http://vllm:${VLLM_PORT}/v1
+      - ONPREM_API_KEY=NONE
+    command: ["--port", "${AGENT_PORT}", "--mcp-url", "http://mcp:${MCP_PORT}/mcp", "--model-config", "model-config.local-vllm.yaml"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: services/agent/src
+          target: /agent/src
+        - action: rebuild
+          path: services/agent/requirements.txt
+  mcp:
+    build:
+      context: .
+      dockerfile: services/mcp/Dockerfile
+    command: ["-t", "streamable-http", "-p", "${MCP_PORT}"]
+    develop:
+      watch:
+        - action: sync+restart
+          path: services/mcp/src
+          target: /mcp/src
+        - action: rebuild
+          path: services/mcp/requirements.txt
+  vllm:
+    build:
+      context: .
+      dockerfile: services/vllm/Dockerfile
+    ipc: host
+    volumes:
+      - "${LOCAL_MODEL_WEIGHTS}:/model"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['${CUDA_VISIBLE_DEVICES}']
+              capabilities: [gpu]
+    command: [
+      "--model", "/model",
+      "--served-model-name", "openai/gpt-oss-120b",
+      "--port", "${VLLM_PORT}",
+      "--enable-auto-tool-choice",
+      "--tool-call-parser", "openai",
+      "--max-model-len", "65536"
+    ]
+  wait-for-mcp:
+    image: busybox
+    command:
+      - sh
+      - -c
+      - "until wget -q -O /dev/null --header='Content-Type: application/json' --header='Accept: application/json, text/event-stream' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}' http://mcp:${MCP_PORT}/mcp 2>/dev/null; do sleep 2; done"
+    depends_on:
+      - mcp
+  wait-for-vllm:
+    image: busybox
+    command:
+      - sh
+      - -c
+      - "until wget -q -O /dev/null --header='Authorization: NONE' http://vllm:${VLLM_PORT}/v1/models 2>/dev/null; do sleep 2; done"
+    depends_on:
+      - vllm

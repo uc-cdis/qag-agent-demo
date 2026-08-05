@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
@@ -75,11 +76,6 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
     return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
 
 
-# NOTE: if you want to switch to the newer OpenAI responses API (with OpenAIResponsesModel),
-# you may need to do some patching of the response stream for the pydantic AI model client implementation
-# see this prior commit as a reference: https://github.com/StevenSong/qag-agent-demo/blob/79ff198623fd2fc0025e383c323cd526a75684a0/agent/agent.py
-
-
 def make_agent(
     *,
     models: dict[str, Any],
@@ -148,8 +144,6 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
-    parser.add_argument("--root-path", default="/qag")
-    parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
 
     models = dict()
@@ -162,6 +156,7 @@ if __name__ == "__main__":
         api_key = os.environ.get(f"{env_prefix}_KEY", None)
         base_url = os.environ.get(f"{env_prefix}_URL", None)
 
+        if provider_type == "local":
         if provider_type == "local":
             assert (
                 base_url is not None and base_url != ""
@@ -179,6 +174,15 @@ if __name__ == "__main__":
             model_name=backend["name"],
             provider=provider_inst,  # type: ignore
         )
+
+    # replace /ROOT_PATH/ in static index.html
+    rel_dir = Path(os.path.dirname(__file__))
+    _root_path = args.root_path.rstrip("/") + "/"
+    with (
+        open(rel_dir / "static/index_base.html", "r") as f_in,
+        open(rel_dir / "static/index.html", "w") as f_out,
+    ):
+        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
 
     # replace /ROOT_PATH/ in static index.html
     rel_dir = Path(os.path.dirname(__file__))
@@ -209,13 +213,12 @@ if __name__ == "__main__":
     ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(orchestrator=orchestrator)
 
-    inner = Starlette(
+    app = Starlette(
         routes=[
-            Mount("/endpoint", app=endpoint_app),
-            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/agui", app=ag_ui_app),
-            Mount("/", app=ui_app),
+            Mount("/qag/endpoint", app=endpoint_app),
+            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/qag/agui", app=ag_ui_app),
+            Mount("/qag", app=ui_app),
         ],
     )
-    app = Starlette(routes=[Mount(args.root_path, app=inner)])
     uvicorn.run(app, host="0.0.0.0", port=args.port)

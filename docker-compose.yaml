@@ -6,12 +6,15 @@ services:
     depends_on:
       wait-for-mcp:
         condition: service_completed_successfully
-      wait-for-vllm:
-        condition: service_completed_successfully
+      # wait-for-vllm:
+      #   condition: service_completed_successfully
     ports:
       - "${AGENT_PORT}:${AGENT_PORT}"
     environment:
-      - LOCAL_API_URL=http://vllm:${VLLM_PORT}/v1
+      - BEDROCK_API_URL
+      - BEDROCK_API_KEY
+      - ONPREM_API_URL
+      - ONPREM_API_KEY
       - ANTHROPIC_API_KEY
       - GOOGLE_API_KEY
       - OPENAI_API_KEY
@@ -35,28 +38,28 @@ services:
           target: /mcp/src
         - action: rebuild
           path: services/mcp/requirements.txt
-  vllm:
-    build:
-      context: .
-      dockerfile: services/vllm/Dockerfile
-    ipc: host
-    volumes:
-      - "${LOCAL_MODEL_WEIGHTS}:/model"
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ['${GPU_DEVICE_ID}']
-              capabilities: [gpu]
-    command: [
-      "--model", "/model",
-      "--served-model-name", "openai/gpt-oss-120b",
-      "--port", "${VLLM_PORT}",
-      "--enable-auto-tool-choice",
-      "--tool-call-parser", "openai",
-      "--max-model-len", "65536"
-    ]
+  # vllm:
+  #   build:
+  #     context: .
+  #     dockerfile: services/vllm/Dockerfile
+  #   # ipc: host
+  #   # volumes:
+  #   #   - "${LOCAL_MODEL_WEIGHTS}:/model"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             device_ids: ['${GPU_DEVICE_ID}']
+  #             capabilities: [gpu]
+  #   command: [
+  #     "--model", "/model",
+  #     "--served-model-name", "openai/gpt-oss-120b",
+  #     "--port", "${VLLM_PORT}",
+  #     "--enable-auto-tool-choice",
+  #     "--tool-call-parser", "openai",
+  #     "--max-model-len", "65536"
+  #   ]
   wait-for-mcp:
     image: busybox
     command:
@@ -65,11 +68,11 @@ services:
       - "until wget -q -O /dev/null --header='Content-Type: application/json' --header='Accept: application/json, text/event-stream' --post-data='{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-03-26\",\"capabilities\":{},\"clientInfo\":{\"name\":\"healthcheck\",\"version\":\"1.0\"}}}' http://mcp:${MCP_PORT}/mcp 2>/dev/null; do sleep 2; done"
     depends_on:
       - mcp
-  wait-for-vllm:
-    image: busybox
-    command:
-      - sh
-      - -c
-      - "until wget -q -O /dev/null --header='Authorization: NONE' http://vllm:${VLLM_PORT}/v1/models 2>/dev/null; do sleep 2; done"
-    depends_on:
-      - vllm
+  # wait-for-vllm:
+  #   image: busybox
+  #   command:
+  #     - sh
+  #     - -c
+  #     - "until wget -q -O /dev/null --header='Authorization: NONE' http://vllm:${VLLM_PORT}/v1/models 2>/dev/null; do sleep 2; done"
+  #   depends_on:
+  #     - vllm
