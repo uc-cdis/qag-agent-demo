@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import uvicorn
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
-    parser.add_argument("--root-path", default="/")
+    parser.add_argument("--root-path", default="/qag")
     args = parser.parse_args()
 
     agent = make_agent(mcp_url=args.mcp_url)
@@ -175,7 +176,7 @@ if __name__ == "__main__":
     ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
 
-    app = Starlette(
+    inner = Starlette(
         routes=[
             Mount("/endpoint", app=endpoint_app),
             Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
@@ -183,4 +184,5 @@ if __name__ == "__main__":
             Mount("/", app=ui_app),
         ],
     )
-    uvicorn.run(app, host="0.0.0.0", port=args.port, root_path=args.root_path)
+    app = Starlette(routes=[Mount(args.root_path, app=inner)])
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
