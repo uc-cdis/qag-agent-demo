@@ -13,6 +13,7 @@ RUN pip3.12 install -r /requirements.txt
 
 COPY services/agent/ /agent/
 COPY model-config.yaml /agent/src/model-config.yaml
+COPY model-config.local-vllm.yaml /agent/src/model-config.local-vllm.yaml
 
 RUN git clone https://github.com/StevenSong/ai-chat-ui.git /build
 RUN npm --prefix /build install && \
