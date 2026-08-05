@@ -107,4 +107,10 @@ A tool to query GDC API for the top-k most variably expressed genes within a set
 Args:
     case_set_id: A unique ID representing a set of cases usually pertaining to a cohort filter
     top_k : An integer value representing the top k most varaibly expressed genes. Example '5'.
+
+Analysis Tools
+1. `get_survival_data`:
+A tool to query the GDC API for survival data for a cohort of cases.
+Args:
+    case_set_id: A unique ID representing a set of cases usually pertaining to a cohort filter
 """

@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import uvicorn
+import yaml
 from openai import OpenAI
 from orchestrator import make_default_rewoo_orchestrator
 from pydantic_ai import (
@@ -83,14 +84,14 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
 
 def make_agent(
     *,
-    model: str | Any,
+    models: dict[str, Any],
     orchestrator: Any,
     retries: int = 0,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
     agent = Agent(
-        model=model,
+        model=models,
         output_type=[str, DeferredToolRequests],
         instructions=(
             "You are a light user-facing controller for a ReWOO bioinformatics "
@@ -154,31 +155,73 @@ if __name__ == "__main__":
     parser.add_argument("--model-config", required=True)
     args = parser.parse_args()
 
-    provider = OpenAIProvider(
-        base_url=args.vllm_url,
-        api_key="EMPTY",
+    # --- Load model backends from config ---
+    models = dict()
+    with open(args.model_config) as f:
+        backends = yaml.safe_load(f)["backends"]
+    for backend in backends:
+        provider_type = backend["provider"]
+        env_prefix = backend["env_prefix"]
+        model_cls, provider_cls = PROVIDER_MAP[provider_type]
+        api_key = os.environ.get(f"{env_prefix}_KEY", None)
+        base_url = os.environ.get(f"{env_prefix}_URL", None)
+
+        if provider_type == "local":
+            assert (
+                base_url is not None and base_url != ""
+            ), f"Must set {env_prefix}_URL env var for {provider_type} backend"
+        else:
+            assert (
+                api_key is not None and api_key != ""
+            ), f"Must set {env_prefix}_KEY env var for {provider_type} backend"
+
+        provider_inst = provider_cls(
+            base_url=base_url,
+            api_key=api_key,
+        )
+        models[backend["alias"]] = model_cls(
+            model_name=backend["name"],
+            provider=provider_inst,  # type: ignore
+        )
+
+    # --- Build orchestrator and agent (preserving existing signatures) ---
+    # Pick the first model as the default for the orchestrator
+    default_alias = backends[0]["alias"]
+    agent_model = models[default_alias]
+
+    client = OpenAI(
+        base_url=os.environ.get(f"{backends[0]['env_prefix']}_URL"),
+        api_key=os.environ.get(f"{backends[0]['env_prefix']}_KEY", "EMPTY"),
     )
-    agent_model = OpenAIChatModel(
-        model_name=args.model,
-        provider=provider,
-    )
-    client = OpenAI(base_url=args.vllm_url, api_key="EMPTY")
     orchestrator = make_default_rewoo_orchestrator(
-        mcp_url=args.mcp_url, model=args.model, client=client
+        mcp_url=args.mcp_url, model=backends[0]["name"], client=client
     )
     agent = make_agent(model=agent_model, orchestrator=orchestrator)
-    models = dict()
-    models["local"] = agent_model
+
+    # --- Replace /ROOT_PATH/ in static index.html ---
     rel_dir = Path(os.path.dirname(__file__))
-    ui_app = agent.to_web(models=models, html_source=rel_dir / "static/index.html")
+    _root_path = args.root_path.rstrip("/") + "/"
+    with (
+        open(rel_dir / "static/index_base.html", "r") as f_in,
+        open(rel_dir / "static/index.html", "w") as f_out,
+    ):
+        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
+
+    # --- Mount apps (preserving existing signatures) ---
+    ui_app = agent.to_web(
+        models=models,
+        html_source=rel_dir / "static/index.html",
+    )
     agui_app = make_ag_ui_app(agent=agent, models=models)
     endpoint_app = make_endpoint_app(orchestrator=orchestrator)
-    app = Starlette(
+
+    inner = Starlette(
         routes=[
-            Mount("/agui", app=agui_app),
             Mount("/rewoo", app=endpoint_app),
+            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/agui", app=agui_app),
             Mount("/", app=ui_app),
         ],
     )
-
+    app = Starlette(routes=[Mount(args.root_path, app=inner)])
     uvicorn.run(app, host="0.0.0.0", port=args.port)
