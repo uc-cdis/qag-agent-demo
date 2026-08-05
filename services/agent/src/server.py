@@ -32,16 +32,14 @@ from _endpoint import make_endpoint_app  # isort: skip
 PROVIDER_MAP: dict[
     str,
     tuple[
-        str,  # env var prefix, suffix with _KEY or _URL
         type[AnthropicModel | GoogleModel | OpenAIChatModel],
         type[AnthropicProvider | GoogleProvider | OpenAIProvider],
     ],
 ] = {
-    "anthropic": ("ANTHROPIC_API", AnthropicModel, AnthropicProvider),
-    "google": ("GOOGLE_API", GoogleModel, GoogleProvider),
-    "openai": ("OPENAI_API", OpenAIChatModel, OpenAIProvider),
+    "anthropic": (AnthropicModel, AnthropicProvider),
+    "google": (GoogleModel, GoogleProvider),
+    "openai": (OpenAIChatModel, OpenAIProvider),
     "local": (
-        "LOCAL_API",
         OpenAIChatModel,
         OpenAIProvider,
     ),  # assume local is using OpenAI compatible API
@@ -94,8 +92,7 @@ def make_agent(
         model=models,
         output_type=[str, DeferredToolRequests],
         instructions=(
-            "You are a light user-facing controller for a ReWOO bioinformatics "
-            "workflow over Genomic Data Commons data.\n\n"
+            "You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.\n\n"
             "Never write plans, cohort definitions, or GDC queries as prose."
             "To help the user, your only option is to call start_rewoo(user_query=...)."
             "That tool will draft the plan and return it for approval — the UI will show the plan and approve/deny buttons."

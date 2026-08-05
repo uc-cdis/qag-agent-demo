@@ -34,7 +34,7 @@ Rules:
 """
 
 SOLVER_PROMPT = """
-You are an AI assitant who solves problems given a concrete step by step plan and evidences for each step.
+You are an AI assistant who solves problems given a concrete step by step plan and evidences for each step.
 Your task is to briefly state the problem, the steps takens to arrive at a solution and then using the evidence
 make a short final conclusion for your task. The main task is a Q&A about accurate variant statistics for the GDC.
 
@@ -51,7 +51,7 @@ RULES:
 """
 
 RESOLVER_PROMPT = """
-You are an AI assitant designed to pick matches for the source value from a list of possible values.
+You are an AI assistant designed to pick matches for the source value from a list of possible values.
 Pick the closest value possible. 
 Source Value: {source}
 Possible Values: {values}
