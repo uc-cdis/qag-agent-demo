@@ -62,11 +62,6 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
     return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
 
 
-# NOTE: if you want to switch to the newer OpenAI responses API (with OpenAIResponsesModel),
-# you may need to do some patching of the response stream for the pydantic AI model client implementation
-# see this prior commit as a reference: https://github.com/StevenSong/qag-agent-demo/blob/79ff198623fd2fc0025e383c323cd526a75684a0/agent/agent.py
-
-
 def make_agent(
     mcp_url: str,
     retries: int = 1,
@@ -130,6 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
+    parser.add_argument("--root-path", default="/")
     args = parser.parse_args()
 
     agent = make_agent(mcp_url=args.mcp_url)
@@ -162,11 +158,16 @@ if __name__ == "__main__":
             provider=provider_inst,  # type: ignore
         )
 
-    # serve the agent with the built in dev UI
-    # this app cannot be mounted under a base path as the frontend logic hard codes some paths
-    # see: https://github.com/pydantic/pydantic-ai/issues/4156
-    # however, maybe you could instead use a subdomain?
+    # replace /ROOT_PATH/ in static index.html
     rel_dir = Path(os.path.dirname(__file__))
+    _root_path = args.root_path.rstrip("/") + "/"
+    with (
+        open(rel_dir / "static/index_base.html", "r") as f_in,
+        open(rel_dir / "static/index.html", "w") as f_out,
+    ):
+        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
+
+    # serve the agent with the built in dev UI
     ui_app = agent.to_web(
         models=models,
         html_source=rel_dir / "static/index.html",
@@ -176,10 +177,10 @@ if __name__ == "__main__":
 
     app = Starlette(
         routes=[
-            Mount("/qag/endpoint", app=endpoint_app),
-            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/qag/agui", app=ag_ui_app),
-            Mount("/qag", app=ui_app),
+            Mount("/endpoint", app=endpoint_app),
+            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/agui", app=ag_ui_app),
+            Mount("/", app=ui_app),
         ],
     )
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="0.0.0.0", port=args.port, root_path=args.root_path)
