@@ -1,13 +1,11 @@
 import argparse
 import os
-import sys
 from pathlib import Path
-from typing import Any, TypedDict, cast
+from typing import TypedDict
 
 import uvicorn
 import yaml
-from openai import OpenAI
-from orchestrator import make_default_rewoo_orchestrator
+from orchestrator import RewooOrchestrator, make_orchestrator
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -52,7 +50,9 @@ class ApprovalMetadata(TypedDict, total=False):
     user_feedback: str
 
 
-def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
+def make_ag_ui_app(
+    agent: Agent[object, str | DeferredToolRequests], models: dict
+) -> Starlette:
     async def run_ag_ui(request: Request) -> Response:
         try:
             body = await request.json()
@@ -78,15 +78,12 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
 
 def make_agent(
     *,
-    model: str,
-    orchestrator: Any,
+    orchestrator: RewooOrchestrator,
     retries: int = 0,
     max_running: int = 4,
     max_queued: int = 8,
-) -> Agent:
+) -> Agent[object, str | DeferredToolRequests]:
     agent = Agent(
-        model=model,
-        output_type=[str, DeferredToolRequests],
         instructions=(
             "You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.\n\n"
             "Never write plans, cohort definitions, or GDC queries as prose."
@@ -98,13 +95,11 @@ def make_agent(
             max_running=max_running, max_queued=max_queued
         ),
         retries=retries,
+        output_type=[str, DeferredToolRequests],
     )
 
     @agent.tool
-    async def start_rewoo(
-        ctx: RunContext,
-        user_query: str,
-    ) -> dict[str, Any]:
+    async def start_rewoo(ctx: RunContext, user_query: str) -> dict:
         """single rewoo entry tool with approval gate baked in"""
         if not ctx.tool_call_approved:
             pending = await orchestrator.create_plan(user_query)
@@ -189,14 +184,8 @@ if __name__ == "__main__":
     default_alias = backends[0]["alias"]
     agent_model = models[default_alias]
 
-    client = OpenAI(
-        base_url=os.environ.get(f"{backends[0]['env_prefix']}_URL"),
-        api_key=os.environ.get(f"{backends[0]['env_prefix']}_KEY", "EMPTY"),
-    )
-    orchestrator = make_default_rewoo_orchestrator(
-        mcp_url=args.mcp_url, model=backends[0]["name"], client=client
-    )
-    agent = make_agent(model=agent_model, orchestrator=orchestrator)
+    orchestrator = make_orchestrator(mcp_url=args.mcp_url)
+    agent = make_agent(orchestrator=orchestrator)
 
     ui_app = agent.to_web(
         models=models,
@@ -207,10 +196,10 @@ if __name__ == "__main__":
 
     inner = Starlette(
         routes=[
-            Mount("/qag/endpoint", app=endpoint_app),
-            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/qag/agui", app=ag_ui_app),
-            Mount("/qag", app=ui_app),
+            Mount("/endpoint", app=endpoint_app),
+            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/agui", app=ag_ui_app),
+            Mount("/", app=ui_app),
         ],
     )
     app = Starlette(routes=[Mount(args.root_path, app=inner)])

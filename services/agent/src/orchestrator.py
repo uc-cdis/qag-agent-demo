@@ -563,7 +563,7 @@ class RewooOrchestrator:
             raise
 
 
-def make_default_rewoo_orchestrator(
+def make_orchestrator(
     *,
     mcp_url: str,
     model: str,
