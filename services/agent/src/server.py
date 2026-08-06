@@ -207,10 +207,10 @@ if __name__ == "__main__":
 
     inner = Starlette(
         routes=[
-            Mount("/qag/endpoint", app=endpoint_app),
-            Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/qag/agui", app=ag_ui_app),
-            Mount("/qag", app=ui_app),
+            Mount("/endpoint", app=endpoint_app),
+            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
+            Mount("/agui", app=ag_ui_app),
+            Mount("/", app=ui_app),
         ],
     )
     app = Starlette(routes=[Mount(args.root_path, app=inner)])
