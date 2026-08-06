@@ -8,6 +8,7 @@ from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ValidationError
+from pydantic_ai.models import Model
 
 # isort: off
 from _defines import SIMPLE_TOOLS
@@ -137,6 +138,7 @@ class Executor:
         token_usage: dict[str, int],
         *,
         max_concurrency: int = 8,
+        model: Model,
     ):
         """executes the rewoo plan using the compiled dag by topological sort execution using an async queue"""
 
@@ -179,33 +181,35 @@ class Executor:
                         result.statuses[node] = NodeStatus.RUNNING
                     step = dag.steps[node]
                     try:
-                        resolved_tool_args = resolve_evidence_refs(
-                            step.tool_args, result.evidence
+                        resolved_tool_arguments = resolve_evidence_refs(
+                            step.tool_arguments, result.evidence
                         )
                         # execute with pre-existing MCP backend
                         # or execute simple arithmetic tool
                         if step.execution_kind == ExecutionKind.MCP:
                             if step.executor_name in SIMPLE_TOOLS:
                                 tool_ = SIMPLE_TOOLS[step.executor_name]
-                                args_ = SimpleToolArgs(**resolved_tool_args)
+                                args_ = SimpleToolArgs(**resolved_tool_arguments)
                                 output = tool_(a=args_.a, b=args_.b)
                             else:
                                 output = await mcp_backend.call_tool(
                                     tool_name=step.executor_name,
-                                    tool_args=resolved_tool_args,
+                                    tool_arguments=resolved_tool_arguments,
                                 )
                         # execute using custom resolver; separate scoped LLM call for cohort field and value resolution (currently sequential) and then execute final GDC query against existing MCP
                         elif step.execution_kind == ExecutionKind.RESOLVER:
-                            resolved_tool_args = dict(resolved_tool_args)
+                            resolved_tool_arguments = dict(resolved_tool_arguments)
                             resolver_args = construct_cohort_filter_args(
-                                **resolved_tool_args
+                                **resolved_tool_arguments
                             )
                             resolver_output = await self.resolver.resolve(
-                                args=resolver_args, token_usage=token_usage
+                                args=resolver_args,
+                                token_usage=token_usage,
+                                model=model,
                             )
                             output = await mcp_backend.call_tool(
                                 tool_name=step.tool_name,
-                                tool_args=resolver_output,
+                                tool_arguments=resolver_output,
                             )
                     # if execution  of a step FAILS, make sure to block all descendants with lock
                     except Exception as error:

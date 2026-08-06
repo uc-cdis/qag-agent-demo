@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import sys
 from typing import Any
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
 
 # isort: off
 from executor import ExecutionResult, NodeStatus
@@ -55,27 +57,27 @@ class Solver:
 
         return history
 
-    def solve(
+    async def solve(
         self,
         *,  # enforce kwargs
         task: str,
         plan_dag: PlanDag,
         execution_result: ExecutionResult,
         token_usage: dict[str, int],
-        ctx: RunContext,
+        model: Model,
     ) -> str:
         history = self.create_plan_evidence_history(
             plan_dag,
             execution_result,
         )
-        result = self.agent.run_sync(
+        result = await self.agent.run(
             user_prompt=f"##Original Task##\n{task}\n\n##Plan & Evidence##\n{history}",
-            model=ctx.model,
+            model=model,
         )
 
         token_usage["input_tokens"] += result.usage.input_tokens
         token_usage["output_tokens"] += result.usage.output_tokens
         token_usage["total_tokens"] += result.usage.total_tokens
 
-        print(result.output)
+        print(result.output, file=sys.stderr)
         return result.output

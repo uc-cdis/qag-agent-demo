@@ -85,7 +85,7 @@ class MCPExecutionBackend:
     async def call_tool(
         self,
         tool_name: str,
-        tool_args: dict[str, Any],
+        tool_arguments: dict[str, Any],
     ) -> Any:
         """execute tool call with MCP"""
         if not self._connected:
@@ -102,7 +102,7 @@ class MCPExecutionBackend:
         try:
             result = await self._client.call_tool(
                 tool_name,
-                tool_args,
+                tool_arguments,
             )
         except Exception as exc:
             raise MCPBackendError(

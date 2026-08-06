@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
-from pydantic_ai import Agent, AgentRunResult, RunContext
+from pydantic_ai import Agent, AgentRunResult
+from pydantic_ai.models import Model
 
 # isort: off
 from _defines import FIELD_REGISTRY, VALUE_REGISTRY
@@ -77,15 +79,14 @@ class Resolver:
     async def resolve(
         self,
         args: ConstructCohortFilterArgs,
-        ctx: RunContext,
         token_usage: dict[str, int],
+        model: Model,
     ) -> Any:
         """takes the input fields and match with exact GDC specific fields and values using LLM calls"""
         supplied_fields = {
-            field: value
-            for field, value in args.model_dump().items()
-            if value is not None
+            field: value for field, value in args.model_dump().items() if value
         }
+        print(f"resolving fields: {supplied_fields}", file=sys.stderr)
         resolved_fields: dict[str, list[str] | int | None] = {}
 
         # loop through fields and match it
@@ -107,7 +108,7 @@ class Resolver:
 
             coro = self.agent.run(
                 user_prompt=f"Pick the closest value possible.\nSource Value: {value}\nPossible Values: {VALUE_REGISTRY[field]}",
-                model=ctx.model,
+                model=model,
             )
             coros.append(coro)
         results: list[AgentRunResult[ResolverResponse]] = await asyncio.gather(*coros)

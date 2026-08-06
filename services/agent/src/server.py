@@ -1,11 +1,14 @@
 import argparse
+import json
 import os
+import sys
 from pathlib import Path
+from textwrap import dedent
 from typing import TypedDict
 
 import uvicorn
 import yaml
-from orchestrator import RewooOrchestrator, make_orchestrator
+from orchestrator import RewooOrchestrator
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -84,12 +87,14 @@ def make_agent(
     max_queued: int = 8,
 ) -> Agent[None, str | DeferredToolRequests]:
     agent = Agent(
-        instructions=(
-            "You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.\n\n"
-            "Never write plans, cohort definitions, or GDC queries as prose."
-            "To help the user, your only option is to call start_rewoo(user_query=...)."
-            "That tool will draft the plan and return it for approval — the UI will show the plan and approve/deny buttons."
-            "Do not narrate what you're about to do; just call the tool."
+        instructions=dedent(
+            """\
+            You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.
+
+            To help the user, your only option is to call run_query.
+            Call the tool with the exact user query, never modify the user's query.
+            Never write plans, cohort definitions, or GDC queries as prose.
+            Do not narrate what you're about to do; just call the tool."""
         ),
         max_concurrency=ConcurrencyLimit(
             max_running=max_running, max_queued=max_queued
@@ -99,11 +104,14 @@ def make_agent(
     )
 
     @agent.tool
-    async def start_rewoo(ctx: RunContext, user_query: str) -> dict:
-        """single rewoo entry tool with approval gate baked in"""
+    async def run_query(ctx: RunContext, user_query: str) -> dict:
         if not ctx.tool_call_approved:
-            pending = await orchestrator.create_plan(user_query)
+            pending = await orchestrator.create_plan(user_query, model=ctx.model)
             orchestrator._register_pending(ctx.tool_call_id, pending.run_id)
+            print(
+                f"Waiting for approval for this plan: {json.dumps(pending.plan_summary, indent=2)}",
+                file=sys.stderr,
+            )
 
             raise ApprovalRequired(
                 metadata={
@@ -122,13 +130,11 @@ def make_agent(
         run_id = orchestrator._get_pending(ctx.tool_call_id)
         if not run_id:
             raise RuntimeError("Approved ReWOO tool call is missing run_id metadata")
-        result = await orchestrator.approve_and_execute(run_id=run_id)
+        result = await orchestrator.approve_and_execute(run_id=run_id, model=ctx.model)
         return {
             "run_id": result.run_id,
             "status": str(result.run_status),
             "answer": result.answer,
-            "execution_summary": getattr(result, "execution_summary", None),
-            "final_evidence": getattr(result, "final_evidence", None),
         }
 
     return agent
@@ -157,10 +163,9 @@ if __name__ == "__main__":
             assert (
                 base_url is not None and base_url != ""
             ), f"Must set {env_prefix}_URL env var for {provider_type} backend"
-        else:
-            assert (
-                api_key is not None and api_key != ""
-            ), f"Must set {env_prefix}_KEY env var for {provider_type} backend"
+        assert (
+            api_key is not None and api_key != ""
+        ), f"Must set {env_prefix}_KEY env var for {provider_type} backend"
 
         provider_inst = provider_cls(
             base_url=base_url,
@@ -184,7 +189,7 @@ if __name__ == "__main__":
     default_alias = backends[0]["alias"]
     agent_model = models[default_alias]
 
-    orchestrator = make_orchestrator(mcp_url=args.mcp_url)
+    orchestrator = RewooOrchestrator(mcp_url=args.mcp_url)
     agent = make_agent(orchestrator=orchestrator)
 
     ui_app = agent.to_web(
@@ -192,7 +197,7 @@ if __name__ == "__main__":
         html_source=rel_dir / "static/index.html",
     )
     ag_ui_app = make_ag_ui_app(agent, models=models)
-    endpoint_app = make_endpoint_app(orchestrator=orchestrator)
+    endpoint_app = make_endpoint_app(models=models, orchestrator=orchestrator)
 
     inner = Starlette(
         routes=[

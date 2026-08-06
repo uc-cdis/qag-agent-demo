@@ -3,20 +3,28 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
+from pydantic_ai.models import Model
+
+# isort: off
 from executor import ExecutionResult, Executor, NodeStatus
 from mcp_executor import MCPExecutionBackend
 from planner import PlanDag, Planner, PlannerResponse
 from solver import Solver
 
+# isort: on
 
-class RunStatus:
+
+class RunStatus(str, Enum):
     PLAN_DRAFTED = "PLAN_DRAFTED"
     EXECUTING = "EXECUTING"
     SOLVED = "SOLVED"
     FAILED = "FAILED"
-    CANCELLED = "CANCELLED"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @dataclass
@@ -111,40 +119,6 @@ class RewooRunStore:
             if error is not None:
                 record.error = error
 
-    async def replace_plan(
-        self,
-        run_id: str,
-        *,
-        user_query: str,
-        planner_response: PlannerResponse,
-        dag: PlanDag,
-        plan_summary: list[dict[str, Any]],
-        token_usage: dict[str, int],
-        feedback: str,
-    ) -> RunRecord:
-        async with self._lock:
-            record = self._runs[run_id]
-            if record.run_status not in {
-                RunStatus.PLAN_DRAFTED,
-                RunStatus.FAILED,
-            }:
-                raise RuntimeError(
-                    f"Cannot replan run {run_id!r} from run_status {record.run_status}"
-                )
-
-            record.user_query = user_query
-            record.planner_response = planner_response
-            record.dag = dag
-            record.plan_summary = plan_summary
-            record.token_usage = token_usage
-            record.run_status = RunStatus.PLAN_DRAFTED
-            record.execution = None
-            record.answer = None
-            record.error = None
-            record.feedback_history.append(feedback)
-
-            return record
-
     async def save_execution_result(
         self,
         run_id: str,
@@ -164,24 +138,22 @@ class RewooRunStore:
 
 
 class RewooOrchestrator:
-    """main ReWOO workflow orchestration class. exposes the plan creation, replanning and execution methods required to complete a ReWOO workflow"""
+    """
+    Main ReWOO workflow orchestration class.
+    Exposes the plan creation and execution methods required to complete a ReWOO workflow
+    """
 
     def __init__(
         self,
-        *,
-        planner: Planner,
-        executor: Executor,
-        solver: Solver,
+        *,  # enforce kwargs
         mcp_url: str,
-        config: RewooConfig | None = None,
-        run_store: RewooRunStore | None = None,
     ) -> None:
-        self.planner = planner
-        self.executor = executor
-        self.solver = solver
+        self.planner = Planner()
+        self.executor = Executor()
+        self.solver = Solver()
         self.mcp_url = mcp_url
-        self.config = config or RewooConfig()
-        self.run_store = run_store or RewooRunStore()
+        self.config = RewooConfig()
+        self.run_store = RewooRunStore()
         self.orch_store = {}
 
     def _new_token_usage(self) -> dict[str, int]:
@@ -211,39 +183,12 @@ class RewooOrchestrator:
                     "tool_name": step.tool_name,
                     "execution_kind": str(compiled.execution_kind),
                     "executor_name": compiled.executor_name,
-                    "tool_args": step.tool_args,
+                    "tool_arguments": step.tool_arguments,
                     "predecessors": sorted(dag.predecessors[step.evidence_id]),
                     "successors": sorted(dag.successors[step.evidence_id]),
                 }
             )
-            # summary.append(
-            #     {
-            #         "plan": step.plan,
-            #         "tool_name": step.tool_name,
-            #     }
-            # )
         return summary
-
-    def _execution_summary(
-        self,
-        execution: ExecutionResult,
-    ) -> dict[str, Any]:
-        return {
-            "statuses": {
-                node: str(run_status) for node, run_status in execution.statuses.items()
-            },
-            "errors": {node: repr(error) for node, error in execution.errors.items()},
-            "evidence_keys": sorted(execution.evidence.keys()),
-        }
-
-    def _select_final_evidence(
-        self,
-        execution: ExecutionResult,
-    ) -> dict[str, Any]:
-        """
-        This return all evidence (TODO select final evidence)
-        """
-        return dict(execution.evidence)
 
     def _should_fail_execution(
         self,
@@ -265,14 +210,16 @@ class RewooOrchestrator:
         user_query: str,
         *,
         message_history: list[Any] | None = None,
-    ) -> PlannerResponse:
+        model: Model,
+    ) -> Pending:
         """create a plan for ReWOO"""
         run_id = f"run_{uuid.uuid4().hex}"
         token_usage = self._new_token_usage()
 
-        planner_response = self.planner.run(
+        planner_response = await self.planner.run(
             user_query=user_query,
             token_usage=token_usage,
+            model=model,
         )
         dag = self.planner.compile_dag(planner_response)
         plan_summary = self._summarize_plan(
@@ -304,49 +251,7 @@ class RewooOrchestrator:
             metadata=record.metadata,
         )
 
-    async def replan(
-        self,
-        run_id: str,
-        feedback: str,
-    ) -> Pending:
-        record = await self.run_store.get(run_id)
-        revised_query = (
-            f"Original user query: \n{record.user_query}\n\n"
-            f"User feedback on previous plan:\n{feedback}\n\n"
-            "Revise the ReWOO plan accordingly."
-        )
-        token_usage = self._new_token_usage()
-        planner_response = self.planner.run(
-            user_query=revised_query,
-            token_usage=token_usage,
-        )
-        dag = self.planner.compile_dag(planner_response)
-        plan_summary = self._summarize_plan(
-            planner_response=planner_response,
-            dag=dag,
-        )
-        updated = await self.run_store.replace_plan(
-            run_id,
-            user_query=record.user_query,
-            planner_response=planner_response,
-            dag=dag,
-            plan_summary=plan_summary,
-            token_usage=token_usage,
-            feedback=feedback,
-        )
-        return Pending(
-            run_id=updated.run_id,
-            run_status=updated.run_status,
-            user_query=updated.user_query,
-            planner_response=updated.planner_response,
-            dag=updated.dag,
-            plan_summary=updated.plan_summary,
-            token_usage=updated.token_usage,
-            feedback_history=updated.feedback_history,
-            metadata=updated.metadata,
-        )
-
-    async def approve_and_execute(self, run_id: str) -> RewooResult:
+    async def approve_and_execute(self, run_id: str, model: Model) -> RewooResult:
         """execute the rest of the ReWOO workflow after Human In The Loop approval"""
         record = await self.run_store.get(run_id)
         if record.run_status != RunStatus.PLAN_DRAFTED:
@@ -355,10 +260,7 @@ class RewooOrchestrator:
                 f"Current run_status: {record.run_status}"
             )
 
-        await self.run_store.update_status(
-            run_id,
-            RunStatus.EXECUTING,
-        )
+        await self.run_store.update_status(run_id, RunStatus.EXECUTING)
 
         try:
             async with MCPExecutionBackend(self.mcp_url) as mcp_backend:
@@ -368,6 +270,7 @@ class RewooOrchestrator:
                     mcp_backend=mcp_backend,
                     max_concurrency=self.config.max_concurrency,
                     token_usage=record.token_usage,
+                    model=model,
                 )
 
             if self._should_fail_execution(execution_result):
@@ -381,11 +284,12 @@ class RewooOrchestrator:
                     f"{execution_result.errors}"
                 )
 
-            answer = self.solver.solve(
+            answer = await self.solver.solve(
                 task=record.user_query,
                 plan_dag=record.dag,
                 execution_result=execution_result,
                 token_usage=record.token_usage,
+                model=model,
             )
             final_status = RunStatus.SOLVED
             updated = await self.run_store.save_execution_result(
@@ -404,7 +308,6 @@ class RewooOrchestrator:
                 dag=updated.dag,
                 execution=execution_result,
                 token_usage=updated.token_usage,
-                # final_evidence=self._select_final_evidence(execution_result),
                 metadata=updated.metadata,
             )
         except Exception as e:
@@ -415,69 +318,17 @@ class RewooOrchestrator:
             )
             raise
 
-    async def execute_plan(self, user_query: str, approved_plan: PlannerResponse):
-        dag = self.planner.compile_dag(approved_plan)
-        async with MCPExecutionBackend(self.mcp_url) as mcp_backend:
-            await mcp_backend.load_tools()
-            execution_result = await self.executor.execute_rewoo_run(
-                dag=dag,
-                mcp_backend=mcp_backend,
-                max_concurrency=self.config.max_concurrency,
-            )
-        answer = self.solver.solve(
-            task=user_query,
-            plan_dag=dag,
-            execution_result=execution_result,
-        )
-        return RewooResult(
-            answer=answer,
-            plan=approved_plan,
-            dag=dag,
-            execution_result=execution_result,
-        )
-
-    async def cancel(self, run_id: str) -> RunView:
-        record = await self.run_store.get(run_id)
-        if record.run_status == RunStatus.EXECUTING:
-            raise RuntimeError(f"Cannot cancel run {run_id!r}; it is already executing")
-        await self.run_store.update_status(
-            run_id,
-            RunStatus.CANCELLED,
-        )
-        return await self.get_status(run_id)
-
-    async def get_status(
-        self,
-        run_id: str,
-    ) -> RunView:
-        record = await self.run_store.get(run_id)
-
-        execution_summary = (
-            self._execution_summary(record.execution)
-            if record.execution is not None
-            else None
-        )
-
-        return RunView(
-            run_id=record.run_id,
-            run_status=record.run_status,
-            user_query=record.user_query,
-            plan_summary=record.plan_summary,
-            execution_summary=execution_summary,
-            answer=record.answer,
-            errors=record.error,
-            token_usage=record.token_usage,
-            feedback_history=record.feedback_history,
-        )
-
-    async def run_end_to_end(self, user_query: str, *, message_history) -> RewooResult:
+    async def run_end_to_end(
+        self, user_query: str, *, message_history, model: Model
+    ) -> RewooResult:
         """method to run entire ReWOO workflow end to end without any HITL approval gate - for endpoint use"""
         run_id = f"run_{uuid.uuid4().hex}"
         token_usage = self._new_token_usage()
 
-        planner_response = self.planner.run(
+        planner_response = await self.planner.run(
             user_query=user_query,
             token_usage=token_usage,
+            model=model,
         )
         dag = self.planner.compile_dag(planner_response)
         plan_summary = self._summarize_plan(
@@ -516,6 +367,7 @@ class RewooOrchestrator:
                     mcp_backend=mcp_backend,
                     max_concurrency=self.config.max_concurrency,
                     token_usage=record.token_usage,
+                    model=model,
                 )
 
             if self._should_fail_execution(execution_result):
@@ -529,11 +381,12 @@ class RewooOrchestrator:
                     f"{execution_result.errors}"
                 )
 
-            answer = self.solver.solve(
+            answer = await self.solver.solve(
                 task=record.user_query,
                 plan_dag=record.dag,
                 execution_result=execution_result,
                 token_usage=record.token_usage,
+                model=model,
             )
             final_status = RunStatus.SOLVED
             updated = await self.run_store.save_execution_result(
@@ -561,15 +414,3 @@ class RewooOrchestrator:
                 error=repr(e),
             )
             raise
-
-
-def make_orchestrator(mcp_url: str) -> RewooOrchestrator:
-    planner = Planner()
-    executor = Executor()
-    solver = Solver()
-    return RewooOrchestrator(
-        planner=planner,
-        executor=executor,
-        solver=solver,
-        mcp_url=mcp_url,
-    )

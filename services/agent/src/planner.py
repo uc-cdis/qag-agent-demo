@@ -6,8 +6,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic_ai import Agent, RunContext
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic_ai import Agent
+from pydantic_ai.models import Model
 
 # isort: off
 from _tool_desc import TOOLS_DESCRIPTION
@@ -32,6 +33,7 @@ ToolArgumentValue = str | int | float | bool | list[str] | EvidenceReference | N
 
 
 class PlannerStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     plan: str = Field(
         min_length=1, description="What this step does and why it is needed."
     )
@@ -44,16 +46,23 @@ class PlannerStep(BaseModel):
         min_length=1,
         description="Exact name of the tool to invoke.",
     )
-    tool_args: dict[str, ToolArgumentValue] = Field(
+    tool_arguments: dict[str, ToolArgumentValue] = Field(
         default_factory=dict,
         description=(
             "Arguments passed to the tool. Values may be literals, lists, "
             "null, or references to earlier evidence."
         ),
     )
-    dependencies: list[EvidenceReference] | None = Field(
-        min_length=1, description="Earlier evidence results needed by this step"
+    dependencies: list[EvidenceReference] = Field(
+        default_factory=list, description="Earlier evidence results needed by this step"
     )
+
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def _normalize_deps(cls, v):
+        if v is None:
+            return []
+        return [{"ref": x} if isinstance(x, str) else x for x in v]
 
 
 class PlannerResponse(BaseModel):
@@ -89,7 +98,7 @@ class CompiledStep:
     plan: str
     evidence_id: str
     tool_name: str
-    tool_args: dict
+    tool_arguments: dict
     execution_kind: ExecutionKind
     executor_name: str
 
@@ -137,7 +146,7 @@ def compile_step(step: PlannerStep) -> CompiledStep:
         plan=step.plan,
         evidence_id=step.evidence_id,
         tool_name=step.tool_name,
-        tool_args=step.tool_args,
+        tool_arguments=step.tool_arguments,
         execution_kind=kind,
         executor_name=executor_name,
     )
@@ -157,14 +166,14 @@ class Planner:
             output_type=PlannerResponse,
         )
 
-    def run(
+    async def run(
         self,
         user_query: str,
-        ctx: RunContext,  # context of the outer agent
         token_usage: dict[str, int],
+        model: Model,
     ) -> PlannerResponse:
         """produces a plan to address the user query via a structured outputs call to the LLM"""
-        result = self.agent.run_sync(user_prompt=user_query, model=ctx.model)
+        result = await self.agent.run(user_prompt=user_query, model=model)
 
         # naive token accounting
         token_usage["input_tokens"] += result.usage.input_tokens
@@ -188,7 +197,7 @@ class Planner:
             if step.dependencies:
                 dependencies = extract_dependencies(step.dependencies)
 
-            dependencies.update(extract_dependencies(step.tool_args))
+            dependencies.update(extract_dependencies(step.tool_arguments))
 
             for dependency in dependencies:
                 if dependency == evidence_id:
