@@ -8,7 +8,6 @@ from typing import TypedDict
 
 import uvicorn
 import yaml
-from orchestrator import RewooOrchestrator
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -29,7 +28,11 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
-from _endpoint import make_endpoint_app  # isort: skip
+# isort: off
+from _orchestrator import RewooOrchestrator
+from _endpoint import make_endpoint_app
+
+# isort: on
 
 PROVIDER_MAP: dict[
     str,

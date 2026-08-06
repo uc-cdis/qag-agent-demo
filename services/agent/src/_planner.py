@@ -10,11 +10,37 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
-# isort: off
-from _tool_desc import TOOLS_DESCRIPTION
-from prompts import PLANNER_PROMPT
+from _tool_desc import TOOLS_DESCRIPTION  # isort: skip
 
-# isort: on
+PLANNER_PROMPT = """You are a planner for a GDC analysis system.
+
+Produce a complete executable plan. Each step must contain exactly:
+- plan: a concise description
+- evidence_id: "#E1", "#E2", ... in order
+- tool_name: exactly one available tool name
+- tool_arguments: arguments for that tool
+- dependencies: references to evidences needed to execute this step
+
+Circular dependencies are not allowed.
+Only a later step may reference an earlier result by placing its evidence ID
+in an argument that expects that result type.
+
+Rules:
+1. Do not execute tools.
+2. Do not calculate or invent results.
+3. Use only the listed tools.
+4. Include every step required to answer the question.
+5. Use arrays for cohort-filter categorical fields.
+6. "Over 40" means min_age = 41.
+7. Prevalence means:
+   number of matching cases / number of eligible cases with data availability.
+8. Return only the schema-conforming response.
+9. Simple tools require raw case counts for computation
+10. Return complete plans only such that they reveal the final answer.
+
+##Available Tools##
+{tools_description}
+"""
 
 
 class EvidenceReference(BaseModel):

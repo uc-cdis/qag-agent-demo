@@ -8,11 +8,17 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic_ai import Agent, AgentRunResult
 from pydantic_ai.models import Model
 
-# isort: off
-from _defines import FIELD_REGISTRY, VALUE_REGISTRY
-from prompts import RESOLVER_PROMPT
+from _defines import FIELD_REGISTRY, VALUE_REGISTRY  # isort: skip
 
-# isort: on
+RESOLVER_PROMPT = """
+You are an AI assistant designed to pick matches for the source value from a list of possible values.
+
+RULES:
+1. You must pick a value from the provided list of possible values
+2. You must only pick one value.
+3. Return the value exactly as it is presented to you.
+4. Return only the value, do not provide any explanation for why you chose it.
+"""
 
 
 def normalize_string_list(value: object) -> list[str] | None:

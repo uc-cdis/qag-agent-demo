@@ -12,9 +12,9 @@ from pydantic_ai.models import Model
 
 # isort: off
 from _defines import SIMPLE_TOOLS
-from mcp_executor import MCPExecutionBackend
-from planner import ExecutionKind, PlanDag
-from resolver import ConstructCohortFilterArgs, Resolver, StringList
+from _mcp_executor import MCPExecutionBackend
+from _planner import ExecutionKind, PlanDag
+from _resolver import ConstructCohortFilterArgs, Resolver, StringList
 
 # isort: on
 
@@ -221,7 +221,7 @@ class Executor:
 
                     # on successful execution and resolution, update the result and reduce in-degree and add new 0 in-degree nodes to exec queue for the next round
                     async with lock:
-                        result.evidence[node] = output
+                        result.evidence[node] = output  # type: ignore
                         result.statuses[node] = NodeStatus.SUCCEEDED
                         for child in dag.successors[node]:
                             if result.statuses[child] != NodeStatus.PENDING:

@@ -7,11 +7,19 @@ from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
 # isort: off
-from executor import ExecutionResult, NodeStatus
-from planner import PlanDag
-from prompts import SOLVER_PROMPT
+from _executor import ExecutionResult, NodeStatus
+from _planner import PlanDag
 
 # isort: on
+
+SOLVER_PROMPT = """
+You are an AI assistant who solves problems given a concrete step by step plan and evidences for each step.
+Your task is to briefly state the problem, the steps takens to arrive at a solution and then using the evidence
+make a short final conclusion for your task. The main task is a Q&A about accurate variant statistics for the GDC.
+
+RULES:
+1. Return numerical answers specified to 2 decimal places, for example '42.05%'.
+"""
 
 
 class Solver:

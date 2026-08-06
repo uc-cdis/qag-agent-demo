@@ -1,3 +1,4 @@
+# TODO pull this from MCP server
 TOOLS_DESCRIPTION = """
 This is list of the available tool and tool sets and their descriptions:
 
