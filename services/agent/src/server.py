@@ -51,7 +51,7 @@ class ApprovalMetadata(TypedDict, total=False):
 
 
 def make_ag_ui_app(
-    agent: Agent[object, str | DeferredToolRequests], models: dict
+    agent: Agent[None, str | DeferredToolRequests], models: dict
 ) -> Starlette:
     async def run_ag_ui(request: Request) -> Response:
         try:
@@ -82,7 +82,7 @@ def make_agent(
     retries: int = 0,
     max_running: int = 4,
     max_queued: int = 8,
-) -> Agent[object, str | DeferredToolRequests]:
+) -> Agent[None, str | DeferredToolRequests]:
     agent = Agent(
         instructions=(
             "You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.\n\n"

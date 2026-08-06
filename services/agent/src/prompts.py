@@ -25,12 +25,7 @@ Rules:
 10. Return complete plans only such that they reveal the final answer.
 
 ##Available Tools##
-{tool_description}
-
-##Your Task##
-{task}
-
-##Now Begin##
+{tools_description}
 """
 
 SOLVER_PROMPT = """
@@ -52,13 +47,10 @@ RULES:
 
 RESOLVER_PROMPT = """
 You are an AI assistant designed to pick matches for the source value from a list of possible values.
-Pick the closest value possible. 
-Source Value: {source}
-Possible Values: {values}
+
 RULES:
 1. You must pick a value from the provided list of possible values
 2. You must only pick one value.
 3. Return the value exactly as it is presented to you.
 4. Return only the value, do not provide any explanation for why you chose it.
-## BEGIN ##
 """

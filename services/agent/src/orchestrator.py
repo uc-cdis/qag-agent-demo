@@ -563,25 +563,13 @@ class RewooOrchestrator:
             raise
 
 
-def make_orchestrator(
-    *,
-    mcp_url: str,
-    model: str,
-    client: Any,
-) -> RewooOrchestrator:
-    """default constrcutor for ReWOO orchestrator"""
-    planner = Planner(
-        client=client,
-        model=model,
-    )
-    executor = Executor(
-        rclient=client,
-        rmodel=model,
-    )
-    solver = Solver(
-        client=client,
-        model=model,
-    )
+def make_orchestrator(mcp_url: str) -> RewooOrchestrator:
+    planner = Planner()
+    executor = Executor()
+    solver = Solver()
     return RewooOrchestrator(
-        planner=planner, executor=executor, solver=solver, mcp_url=mcp_url
+        planner=planner,
+        executor=executor,
+        solver=solver,
+        mcp_url=mcp_url,
     )

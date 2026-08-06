@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Mapping
 from typing import Annotated, Any
 
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+from pydantic_ai import Agent, AgentRunResult, RunContext
+
+# isort: off
 from _defines import FIELD_REGISTRY, VALUE_REGISTRY
 from prompts import RESOLVER_PROMPT
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
+
+# isort: on
 
 
 def normalize_string_list(value: object) -> list[str] | None:
@@ -64,23 +68,16 @@ class Resolver:
     simple class to resolve cohort filter generation using simple LLM calls
     """
 
-    def __init__(
-        self,
-        client: Any,
-        model: str,
-        prompt: str = RESOLVER_PROMPT,
-        field_registry: Mapping[str, str] = FIELD_REGISTRY,
-        value_registry: Mapping[str, Any] = VALUE_REGISTRY,
-    ) -> None:
-        self.client = client
-        self.model = model
-        self.prompt = prompt
-        self.field_registry = field_registry
-        self.value_registry = value_registry
+    def __init__(self) -> None:
+        self.agent = Agent(
+            instructions=RESOLVER_PROMPT,
+            output_type=ResolverResponse,
+        )
 
     async def resolve(
         self,
         args: ConstructCohortFilterArgs,
+        ctx: RunContext,
         token_usage: dict[str, int],
     ) -> Any:
         """takes the input fields and match with exact GDC specific fields and values using LLM calls"""
@@ -89,52 +86,38 @@ class Resolver:
             for field, value in args.model_dump().items()
             if value is not None
         }
-        resolved_fields: dict[str, Any] = {}
+        resolved_fields: dict[str, list[str] | int | None] = {}
 
         # loop through fields and match it
+        coros = []
         for field, value in supplied_fields.items():
             if field in {"min_age", "max_age"} and value:
                 resolved_fields[field] = int(value * 365)
                 continue
 
-            if field not in self.field_registry:
+            if field not in FIELD_REGISTRY:
                 raise ValueError(f"Unknown cohort field {field!r}")
 
-            if field not in self.value_registry:
+            if field not in VALUE_REGISTRY:
                 raise ValueError(f"No allowed-value registry for {field!r}")
 
             if not value or len(value) == 0:
                 resolved_fields[field] = None
                 continue
 
-            response = await asyncio.to_thread(
-                self.client.chat.completions.create,
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": self.prompt.format(
-                            source=value,
-                            values=self.value_registry[field],
-                        ),
-                    }
-                ],
-                temperature=1.0,
-                max_tokens=2048,
-                extra_body={
-                    "structured_outputs": {
-                        "json": ResolverResponse.model_json_schema(),
-                    }
-                },
+            coro = self.agent.run(
+                user_prompt="Pick the closest value possible.\nSource Value: {value}\nPossible Values: {VALUE_REGISTRY[field]}",
+                model=ctx.model,
             )
-            # naive token accounting
-            token_usage["input_tokens"] += response.usage.prompt_tokens
-            token_usage["output_tokens"] += response.usage.completion_tokens
-            token_usage["total_tokens"] += response.usage.total_tokens
-            content = response.choices[0].message.content
-            if content is None:
-                raise ValueError(f"Resolver returned no value for {field!r}")
+            coros.append(coro)
+        results: list[AgentRunResult[ResolverResponse]] = await asyncio.gather(*coros)
 
-            resolver_result = ResolverResponse.model_validate_json(content)
-            resolved_fields[field] = resolver_result.value
+        for field, result in zip(supplied_fields, results):
+            resolved_fields[field] = result.output.value
+
+            # naive token accounting
+            token_usage["input_tokens"] += result.usage.input_tokens
+            token_usage["output_tokens"] += result.usage.output_tokens
+            token_usage["total_tokens"] += result.usage.total_tokens
+
         return resolved_fields

@@ -5,11 +5,15 @@ from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
 
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic_ai import Agent, RunContext
+
+# isort: off
 from _tool_desc import TOOLS_DESCRIPTION
 from prompts import PLANNER_PROMPT
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+# isort: on
 
 
 class EvidenceReference(BaseModel):
@@ -47,7 +51,7 @@ class PlannerStep(BaseModel):
             "null, or references to earlier evidence."
         ),
     )
-    dependencies: Optional[list[EvidenceReference]] = Field(
+    dependencies: list[EvidenceReference] | None = Field(
         min_length=1, description="Earlier evidence results needed by this step"
     )
 
@@ -85,21 +89,15 @@ class CompiledStep:
     plan: str
     evidence_id: str
     tool_name: str
-    tool_args: dict[str, Any]
+    tool_args: dict
     execution_kind: ExecutionKind
     executor_name: str
-
-
-# def extract_dependencies(dependency_list):
-#     if not dependency_list:
-#         return []
-#     return [d.ref for d in dependency_list]
 
 
 EVIDENCE_REF_PATTERN = re.compile(r"^#E[1-9]\d*$")
 
 
-def extract_dependencies(value: Any) -> set[str]:
+def extract_dependencies(value) -> set[str]:
     deps: set[str] = set()
 
     if isinstance(value, str):
@@ -152,55 +150,28 @@ class Planner:
     Output: A directed acyclic graph structured object with plan steps
     """
 
-    def __init__(
-        self,
-        *,
-        client: Any,
-        model: str,
-        retry_reason: dict[int, str] = {},
-        prompt: str = PLANNER_PROMPT,
-        tools: str = TOOLS_DESCRIPTION,
-    ):
+    def __init__(self):
         super().__init__()
-        self.prompt = prompt
-        self.tools = tools
-        self.model = model
-        self.client = client
-        self.retry_reason = retry_reason
+        self.agent = Agent(
+            instructions=PLANNER_PROMPT.format(tools_description=TOOLS_DESCRIPTION),
+            output_type=PlannerResponse,
+        )
 
     def run(
         self,
         user_query: str,
+        ctx: RunContext,  # context of the outer agent
         token_usage: dict[str, int],
     ) -> PlannerResponse:
         """produces a plan to address the user query via a structured outputs call to the LLM"""
-        self.user_query = user_query
-        prompt = self.prompt.format(tool_description=self.tools, task=user_query)
-        result = self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,
-            max_tokens=2048,
-            seed=42,
-            extra_body={
-                "structured_outputs": {
-                    "json": PlannerResponse.model_json_schema(),
-                }
-            },
-        )
+        result = self.agent.run_sync(user_prompt=user_query, model=ctx.model)
+
         # naive token accounting
-        token_usage["input_tokens"] += result.usage.prompt_tokens
-        token_usage["output_tokens"] += result.usage.completion_tokens
+        token_usage["input_tokens"] += result.usage.input_tokens
+        token_usage["output_tokens"] += result.usage.output_tokens
         token_usage["total_tokens"] += result.usage.total_tokens
 
-        # response validation
-        content = result.choices[0].message.content
-        if content is None:
-            raise ValueError("Planner returned empty")
-        try:
-            return PlannerResponse.model_validate_json(content)
-        except ValidationError as e:
-            raise ValueError(f"Planner returned invalid structured output: {e}") from e
+        return result.output
 
     def compile_dag(self, plan: PlannerResponse) -> PlanDag:
         """compiles a simple dag like object over the plan steps with evidences serving as dependency indicators"""

@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from pydantic import BaseModel, ValidationError
+
+# isort: off
 from _defines import SIMPLE_TOOLS
 from mcp_executor import MCPExecutionBackend
 from planner import ExecutionKind, PlanDag
-from prompts import RESOLVER_PROMPT
-from pydantic import BaseModel, ConfigDict, ValidationError, validate_call
 from resolver import ConstructCohortFilterArgs, Resolver, StringList
+
+# isort: on
 
 
 class SimpleToolArgs(BaseModel):
@@ -125,15 +127,8 @@ class Executor:
     per the plan. Uses dag in-degree for parallel execution
     """
 
-    def __init__(
-        self,
-        rclient: Any,
-        rmodel: str,
-        rprompt: str = RESOLVER_PROMPT,
-    ) -> None:
-        self.rclient = rclient
-        self.rmodel = rmodel
-        self.rprompt = rprompt
+    def __init__(self) -> None:
+        self.resolver = Resolver()
 
     async def execute_rewoo_run(
         self,
@@ -202,14 +197,10 @@ class Executor:
                         # execute using custom resolver; separate scoped LLM call for cohort field and value resolution (currently sequential) and then execute final GDC query against existing MCP
                         elif step.execution_kind == ExecutionKind.RESOLVER:
                             resolved_tool_args = dict(resolved_tool_args)
-                            resolver = Resolver(
-                                client=self.rclient,
-                                model=self.rmodel,
-                            )
                             resolver_args = construct_cohort_filter_args(
                                 **resolved_tool_args
                             )
-                            resolver_output = await resolver.resolve(
+                            resolver_output = await self.resolver.resolve(
                                 args=resolver_args, token_usage=token_usage
                             )
                             output = await mcp_backend.call_tool(
