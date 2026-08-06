@@ -35,14 +35,6 @@ make a short final conclusion for your task. The main task is a Q&A about accura
 
 RULES:
 1. Return numerical answers specified to 2 decimal places, for example '42.05%'.
-
-##Original Task##
-{task}
-
-##Plan & Evidence##
-{plan_evidence}
-
-##Begin##
 """
 
 RESOLVER_PROMPT = """

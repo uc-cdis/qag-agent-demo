@@ -106,7 +106,7 @@ class Resolver:
                 continue
 
             coro = self.agent.run(
-                user_prompt="Pick the closest value possible.\nSource Value: {value}\nPossible Values: {VALUE_REGISTRY[field]}",
+                user_prompt=f"Pick the closest value possible.\nSource Value: {value}\nPossible Values: {VALUE_REGISTRY[field]}",
                 model=ctx.model,
             )
             coros.append(coro)

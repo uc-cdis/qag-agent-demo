@@ -2,23 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
+from pydantic_ai import Agent, RunContext
+
+# isort: off
 from executor import ExecutionResult, NodeStatus
 from planner import PlanDag
 from prompts import SOLVER_PROMPT
 
+# isort: on
+
 
 class Solver:
-    def __init__(
-        self,
-        *,
-        client: Any,
-        model: str,
-        prompt: str = SOLVER_PROMPT,
-    ) -> None:
-        self.prompt = prompt
-        self.client = client
-        self.model = model
-        pass
+    def __init__(self) -> None:
+        self.agent = Agent(
+            instructions=SOLVER_PROMPT,
+        )
 
     def create_plan_evidence_history(
         self,
@@ -59,49 +57,25 @@ class Solver:
 
     def solve(
         self,
+        *,  # enforce kwargs
         task: str,
         plan_dag: PlanDag,
         execution_result: ExecutionResult,
         token_usage: dict[str, int],
+        ctx: RunContext,
     ) -> str:
         history = self.create_plan_evidence_history(
             plan_dag,
             execution_result,
         )
-
-        response = self._solve(
-            task=task,
-            plan_evidence_history=history,
+        result = self.agent.run_sync(
+            user_prompt=f"##Original Task##\n{task}\n\n##Plan & Evidence##\n{history}",
+            model=ctx.model,
         )
-        token_usage["input_tokens"] += response.usage.prompt_tokens
-        token_usage["output_tokens"] += response.usage.completion_tokens
-        token_usage["total_tokens"] += response.usage.total_tokens
 
-        content = response.choices[0].message.content
+        token_usage["input_tokens"] += result.usage.input_tokens
+        token_usage["output_tokens"] += result.usage.output_tokens
+        token_usage["total_tokens"] += result.usage.total_tokens
 
-        if content is None:
-            raise ValueError("Solver returned empty content")
-
-        print(content)
-        return content
-
-    def _solve(
-        self,
-        task: str,
-        plan_evidence_history: list[dict],
-    ):
-        return self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": self.prompt.format(
-                        plan_evidence=plan_evidence_history,
-                        task=task,
-                    ),
-                }
-            ],
-            temperature=0.0,
-            max_tokens=2048,
-            seed=42,
-        )
+        print(result.output)
+        return result.output
