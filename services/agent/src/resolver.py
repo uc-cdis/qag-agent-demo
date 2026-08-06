@@ -93,7 +93,7 @@ class Resolver:
         coros = []
         for field, value in supplied_fields.items():
             if field in {"min_age", "max_age"} and value:
-                resolved_fields[field] = int(value * 365)
+                resolved_fields[field] = int(value)  # keep age in years
                 continue
 
             if field not in FIELD_REGISTRY:
