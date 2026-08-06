@@ -78,14 +78,14 @@ def make_ag_ui_app(agent: Agent, models: dict) -> Starlette:
 
 def make_agent(
     *,
-    models: dict[str, Any],
+    model: str,
     orchestrator: Any,
     retries: int = 0,
     max_running: int = 4,
     max_queued: int = 8,
 ) -> Agent:
     agent = Agent(
-        model=models,
+        model=model,
         output_type=[str, DeferredToolRequests],
         instructions=(
             "You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.\n\n"
@@ -144,6 +144,8 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--port", type=int, default=8000)
     parser.add_argument("--mcp-url", required=True)
     parser.add_argument("--model-config", required=True)
+    parser.add_argument("--root-path", default="/qag")
+    parser.add_argument("--retries", type=int, default=1)
     args = parser.parse_args()
 
     models = dict()
@@ -203,7 +205,7 @@ if __name__ == "__main__":
     ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(orchestrator=orchestrator)
 
-    app = Starlette(
+    inner = Starlette(
         routes=[
             Mount("/qag/endpoint", app=endpoint_app),
             Mount("/qag/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
@@ -211,4 +213,5 @@ if __name__ == "__main__":
             Mount("/qag", app=ui_app),
         ],
     )
+    app = Starlette(routes=[Mount(args.root_path, app=inner)])
     uvicorn.run(app, host="0.0.0.0", port=args.port)
