@@ -53,8 +53,7 @@ services:
       "--port", "${VLLM_PORT}",
       "--enable-auto-tool-choice",
       "--tool-call-parser", "openai",
-      "--max-model-len", "65536",
-      "--enforce-eager"
+      "--max-model-len", "65536"
     ]
   wait-for-mcp:
     image: busybox
