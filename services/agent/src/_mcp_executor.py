@@ -121,7 +121,7 @@ class MCPExecutionBackend:
         if tool_result.is_error:
             try:
                 message = [
-                    block.text
+                    block.text  # type: ignore
                     for block in tool_result.content
                     if getattr(block, "type", None) == "text"
                 ]
