@@ -5,6 +5,7 @@ from pathlib import Path
 from textwrap import dedent
 from typing import TypedDict
 
+from cachetools import TTLCache
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -17,8 +18,11 @@ from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
 from .._agui import make_ag_ui_app
+from .._cache import make_cache_app
 from ._endpoint import make_endpoint_app
 from ._orchestrator import RewooOrchestrator
+
+cache = TTLCache(maxsize=1000, ttl=10800)
 
 
 class ApprovalMetadata(TypedDict, total=False):
@@ -88,7 +92,7 @@ def make_agent(
 
 
 def make_agent_app(models, mcp_url, retries, root_path):
-    orchestrator = RewooOrchestrator(mcp_url=mcp_url)
+    orchestrator = RewooOrchestrator(mcp_url=mcp_url, cache=cache)
     agent = make_agent(orchestrator=orchestrator, retries=retries)
 
     # replace /ROOT_PATH/ in static index.html
@@ -109,6 +113,7 @@ def make_agent_app(models, mcp_url, retries, root_path):
     )
     ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(models=models, orchestrator=orchestrator)
+    cache_app = make_cache_app(cache)
 
     app = Starlette(
         routes=[
@@ -117,6 +122,7 @@ def make_agent_app(models, mcp_url, retries, root_path):
                 "/assets", app=StaticFiles(directory=rel_dir / "../../static/assets_v3")
             ),
             Mount("/agui", app=ag_ui_app),
+            Mount("/cache", app=cache_app),
             Mount("/", app=ui_app),
         ],
     )

@@ -3,3 +3,4 @@ fastapi
 uvicorn
 pyyaml
 fastmcp-slim[client]
+cachetools

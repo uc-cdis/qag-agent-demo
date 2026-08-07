@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import sys
 from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
@@ -92,7 +91,6 @@ class Resolver:
         supplied_fields = {
             field: value for field, value in args.model_dump().items() if value
         }
-        print(f"resolving fields: {supplied_fields}", file=sys.stderr)
         resolved_fields: dict[str, list[str] | int | None] = {}
 
         # loop through fields and match it

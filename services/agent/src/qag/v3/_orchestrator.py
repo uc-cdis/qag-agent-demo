@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from cachetools import TTLCache
 from pydantic_ai.models import Model
 
 from ._executor import ExecutionResult, Executor, NodeStatus
@@ -144,11 +145,13 @@ class RewooOrchestrator:
         self,
         *,  # enforce kwargs
         mcp_url: str,
+        cache: TTLCache,
     ) -> None:
         self.planner = Planner()
         self.executor = Executor()
         self.solver = Solver()
         self.mcp_url = mcp_url
+        self.cache = cache
         self.config = RewooConfig()
         self.run_store = RewooRunStore()
         self.orch_store = {}
@@ -260,7 +263,7 @@ class RewooOrchestrator:
         await self.run_store.update_status(run_id, RunStatus.EXECUTING)
 
         try:
-            async with MCPExecutionBackend(self.mcp_url) as mcp_backend:
+            async with MCPExecutionBackend(self.mcp_url, self.cache) as mcp_backend:
                 await mcp_backend.load_tools()
                 execution_result = await self.executor.execute_rewoo_run(
                     dag=record.dag,
@@ -357,7 +360,7 @@ class RewooOrchestrator:
         )
 
         try:
-            async with MCPExecutionBackend(self.mcp_url) as mcp_backend:
+            async with MCPExecutionBackend(self.mcp_url, self.cache) as mcp_backend:
                 await mcp_backend.load_tools()
                 execution_result = await self.executor.execute_rewoo_run(
                     dag=record.dag,

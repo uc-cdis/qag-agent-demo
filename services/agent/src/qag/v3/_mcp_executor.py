@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
+import secrets
 from dataclasses import dataclass
 from typing import Any
 
+from cachetools import TTLCache
 from fastmcp import Client
 from fastmcp.client.client import CallToolResult
+from mcp.types import TextContent
 
 
 class MCPBackendError(RuntimeError):
@@ -35,9 +39,11 @@ class MCPExecutionBackend:
     def __init__(
         self,
         mcp_url: str,
+        cache: TTLCache,
     ):
         super().__init__()
         self.mcp_url = mcp_url
+        self.cache = cache
         self._client = Client(mcp_url)
         self._connected = False
         self._tool_definitions: dict[str, MCPToolDefinition] = {}
@@ -104,6 +110,23 @@ class MCPExecutionBackend:
                 tool_name,
                 tool_arguments,
             )
+            if tool_name == "get_survival_data":
+                assert len(result.content) == 1
+                content = result.content[0]
+                assert isinstance(content, TextContent)
+                payload = json.loads(content.text)
+
+                # cache survival payload server side, return ID to retrieve
+                cache_id = secrets.token_urlsafe(8)
+                agent_payload = {
+                    "payload_id": cache_id,
+                    "summary_stats": [
+                        x.pop("summary")  # extract summary for agent
+                        for x in payload["results"]
+                    ],
+                }
+                self.cache[cache_id] = payload
+                content.text = json.dumps(agent_payload)  # replace payload for agent
         except Exception as exc:
             raise MCPBackendError(
                 f"MCP call failed for tool {tool_name!r}: {type(exc).__name__}: {exc}"

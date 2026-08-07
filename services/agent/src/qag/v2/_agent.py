@@ -1,15 +1,45 @@
 import os
-import sys
+import secrets
 from pathlib import Path
 
-from pydantic_ai import Agent, ConcurrencyLimit
-from pydantic_ai.mcp import MCPToolset, StreamableHttpTransport
+from cachetools import TTLCache
+from pydantic_ai import Agent, ConcurrencyLimit, RunContext
+from pydantic_ai.mcp import (
+    CallToolFunc,
+    MCPToolset,
+    StreamableHttpTransport,
+    ToolResult,
+)
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
 from .._agui import make_ag_ui_app
+from .._cache import make_cache_app
 from ._endpoint import make_endpoint_app
+
+cache = TTLCache(maxsize=1000, ttl=10800)
+
+
+async def process_tool_call(
+    ctx: RunContext,
+    call_tool: CallToolFunc,
+    name: str,
+    tool_args: dict,
+) -> ToolResult:
+    result = await call_tool(name, tool_args)
+    if name != "get_survival_data":
+        return result
+
+    # cache survival payload server side, return ID to retrieve
+    assert isinstance(result, dict)
+    agent_result = [x.pop("summary") for x in result["results"]]
+    cache_id = secrets.token_urlsafe(8)
+    cache[cache_id] = result
+    return {
+        "payload_id": cache_id,
+        "summary_stats": agent_result,
+    }
 
 
 def make_agent(
@@ -21,6 +51,7 @@ def make_agent(
     mcp_server = MCPToolset(
         StreamableHttpTransport(mcp_url),
         include_instructions=True,
+        process_tool_call=process_tool_call,
     )
 
     agent = Agent(
@@ -75,7 +106,6 @@ def make_agent_app(models, mcp_url, retries, root_path):
 
     # replace /ROOT_PATH/ in static index.html
     rel_dir = Path(os.path.dirname(__file__))
-    print("v2 rel_dir:", rel_dir, file=sys.stderr)
     _root_path = root_path.rstrip("/") + "/"
     with (
         open(rel_dir / "../../static/index_base.html", "r") as f_in,
@@ -93,6 +123,7 @@ def make_agent_app(models, mcp_url, retries, root_path):
     )
     ag_ui_app = make_ag_ui_app(agent, models=models)
     endpoint_app = make_endpoint_app(agent=agent, models=models)
+    cache_app = make_cache_app(cache)
 
     app = Starlette(
         routes=[
@@ -101,6 +132,7 @@ def make_agent_app(models, mcp_url, retries, root_path):
                 "/assets", app=StaticFiles(directory=rel_dir / "../../static/assets_v2")
             ),
             Mount("/agui", app=ag_ui_app),
+            Mount("/cache", app=cache_app),
             Mount("/", app=ui_app),
         ],
     )
