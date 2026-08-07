@@ -10,13 +10,10 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from pydantic_ai.models import Model
 
-# isort: off
-from _defines import SIMPLE_TOOLS
-from _mcp_executor import MCPExecutionBackend
-from _planner import ExecutionKind, PlanDag
-from _resolver import ConstructCohortFilterArgs, Resolver, StringList
-
-# isort: on
+from ._defines import SIMPLE_TOOLS
+from ._mcp_executor import MCPExecutionBackend
+from ._planner import ExecutionKind, PlanDag
+from ._resolver import ConstructCohortFilterArgs, Resolver, StringList
 
 
 class SimpleToolArgs(BaseModel):

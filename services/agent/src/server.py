@@ -1,38 +1,19 @@
 import argparse
-import json
 import os
-import sys
-from pathlib import Path
-from textwrap import dedent
-from typing import TypedDict
 
 import uvicorn
 import yaml
-from pydantic_ai import (
-    Agent,
-    ApprovalRequired,
-    ConcurrencyLimit,
-    DeferredToolRequests,
-    RunContext,
-)
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic_ai.ui.ag_ui import AGUIAdapter
 from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.routing import Mount, Route
-from starlette.staticfiles import StaticFiles
+from starlette.routing import Mount
 
-# isort: off
-from _orchestrator import RewooOrchestrator
-from _endpoint import make_endpoint_app
-
-# isort: on
+from qag.v2._agent import make_agent_app as make_v2_app  # isort: skip
+from qag.v3._agent import make_agent_app as make_v3_app  # isort: skip
 
 PROVIDER_MAP: dict[
     str,
@@ -49,98 +30,6 @@ PROVIDER_MAP: dict[
         OpenAIProvider,
     ),  # assume local is using OpenAI compatible API
 }
-
-
-class ApprovalMetadata(TypedDict, total=False):
-    run_id: str
-    user_feedback: str
-
-
-def make_ag_ui_app(
-    agent: Agent[None, str | DeferredToolRequests], models: dict
-) -> Starlette:
-    async def run_ag_ui(request: Request) -> Response:
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-
-        requested_model_alias = body.get("model")
-        selected_model = models.get(requested_model_alias)
-
-        if not selected_model and models:
-            default_alias = next(iter(models.keys()))
-            selected_model = models[default_alias]
-            print(
-                f"Warning: Model '{requested_model_alias}' not found. Falling back to '{default_alias}'."
-            )
-
-        return await AGUIAdapter.dispatch_request(
-            request, agent=agent, model=selected_model
-        )
-
-    return Starlette(routes=[Route("/", run_ag_ui, methods=["POST"])])
-
-
-def make_agent(
-    *,
-    orchestrator: RewooOrchestrator,
-    retries: int = 0,
-    max_running: int = 4,
-    max_queued: int = 8,
-) -> Agent[None, str | DeferredToolRequests]:
-    agent = Agent(
-        instructions=dedent(
-            """\
-            You are a light user-facing controller for a plan then execute bioinformatics workflow over data from the Genomic Data Commons.
-
-            To help the user, your only option is to call run_query.
-            Call the tool with the exact user query, never modify the user's query.
-            Never write plans, cohort definitions, or GDC queries as prose.
-            Do not narrate what you're about to do; just call the tool."""
-        ),
-        max_concurrency=ConcurrencyLimit(
-            max_running=max_running, max_queued=max_queued
-        ),
-        retries=retries,
-        output_type=[str, DeferredToolRequests],
-    )
-
-    @agent.tool
-    async def run_query(ctx: RunContext, user_query: str) -> dict:
-        if not ctx.tool_call_approved:
-            pending = await orchestrator.create_plan(user_query, model=ctx.model)
-            orchestrator._register_pending(ctx.tool_call_id, pending.run_id)
-            print(
-                f"Waiting for approval for this plan: {json.dumps(pending.plan_summary, indent=2)}",
-                file=sys.stderr,
-            )
-
-            raise ApprovalRequired(
-                metadata={
-                    "approval_kind": "rewoo_plan",
-                    "run_id": pending.run_id,
-                    "status": str(pending.run_status),
-                    "query": user_query,
-                    "plan": pending.plan_summary,
-                    "message": (
-                        "Approve this ReWOO plan to execute it, or deny and "
-                        "provide feedback for a revised plan."
-                    ),
-                }
-            )
-
-        run_id = orchestrator._get_pending(ctx.tool_call_id)
-        if not run_id:
-            raise RuntimeError("Approved ReWOO tool call is missing run_id metadata")
-        result = await orchestrator.approve_and_execute(run_id=run_id, model=ctx.model)
-        return {
-            "run_id": result.run_id,
-            "status": str(result.run_status),
-            "answer": result.answer,
-        }
-
-    return agent
 
 
 if __name__ == "__main__":
@@ -179,35 +68,26 @@ if __name__ == "__main__":
             provider=provider_inst,  # type: ignore
         )
 
-    # replace /ROOT_PATH/ in static index.html
-    rel_dir = Path(os.path.dirname(__file__))
-    _root_path = args.root_path.rstrip("/") + "/"
-    with (
-        open(rel_dir / "static/index_base.html", "r") as f_in,
-        open(rel_dir / "static/index.html", "w") as f_out,
-    ):
-        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
-
-    # Pick the first model as the default for the orchestrator
-    default_alias = backends[0]["alias"]
-    agent_model = models[default_alias]
-
-    orchestrator = RewooOrchestrator(mcp_url=args.mcp_url)
-    agent = make_agent(orchestrator=orchestrator)
-
-    ui_app = agent.to_web(
+    # because of dev UI's chat ID suffix logic, can't put v3 under a subpath of v2
+    # e.g. if v2 gets /qag and v3 gets /qag/v3, the /v3 suffix will be interpreted
+    # as a v2 chat ID even though v3 is still up and its own subpaths still work
+    # get around this by just moving v2 to a subpath as well, need to update links
+    v2_app = make_v2_app(
         models=models,
-        html_source=rel_dir / "static/index.html",
+        mcp_url=args.mcp_url,
+        retries=args.retries,
+        root_path=args.root_path + "/v2",
     )
-    ag_ui_app = make_ag_ui_app(agent, models=models)
-    endpoint_app = make_endpoint_app(models=models, orchestrator=orchestrator)
-
+    v3_app = make_v3_app(
+        models=models,
+        mcp_url=args.mcp_url,
+        retries=args.retries,
+        root_path=args.root_path + "/v3",
+    )
     inner = Starlette(
         routes=[
-            Mount("/endpoint", app=endpoint_app),
-            Mount("/assets", app=StaticFiles(directory=rel_dir / "static/assets")),
-            Mount("/agui", app=ag_ui_app),
-            Mount("/", app=ui_app),
+            Mount("/v2", app=v2_app),
+            Mount("/v3", app=v3_app),
         ],
     )
     app = Starlette(routes=[Mount(args.root_path, app=inner)])

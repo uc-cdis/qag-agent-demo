@@ -6,11 +6,8 @@ from typing import Any
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
-# isort: off
-from _executor import ExecutionResult, NodeStatus
-from _planner import PlanDag
-
-# isort: on
+from ._executor import ExecutionResult, NodeStatus
+from ._planner import PlanDag
 
 SOLVER_PROMPT = """
 You are an AI assistant who solves problems given a concrete step by step plan and evidences for each step.

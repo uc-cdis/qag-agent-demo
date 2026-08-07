@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic_ai import Agent
 from pydantic_ai.models import Model
 
-from _tool_desc import TOOLS_DESCRIPTION  # isort: skip
+from ._tool_desc import TOOLS_DESCRIPTION
 
 PLANNER_PROMPT = """You are a planner for a GDC analysis system.
 

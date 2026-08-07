@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 from pydantic_core import to_json
 
-from _orchestrator import RewooOrchestrator  # isort: skip
+from ._orchestrator import RewooOrchestrator
 
 
 class InvokeRequest(BaseModel):

@@ -8,7 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 from pydantic_ai import Agent, AgentRunResult
 from pydantic_ai.models import Model
 
-from _defines import FIELD_REGISTRY, VALUE_REGISTRY  # isort: skip
+from ._defines import FIELD_REGISTRY, VALUE_REGISTRY
 
 RESOLVER_PROMPT = """
 You are an AI assistant designed to pick matches for the source value from a list of possible values.
