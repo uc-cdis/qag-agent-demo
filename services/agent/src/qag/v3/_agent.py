@@ -1,4 +1,3 @@
-import argparse
 import json
 import os
 import sys
@@ -6,8 +5,6 @@ from pathlib import Path
 from textwrap import dedent
 from typing import TypedDict
 
-import uvicorn
-import yaml
 from pydantic_ai import (
     Agent,
     ApprovalRequired,
@@ -15,11 +12,8 @@ from pydantic_ai import (
     DeferredToolRequests,
     RunContext,
 )
-from pydantic_ai.ui.ag_ui import AGUIAdapter
 from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import Response
-from starlette.routing import Mount, Route
+from starlette.routing import Mount
 from starlette.staticfiles import StaticFiles
 
 from .._agui import make_ag_ui_app
