@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GDC QAG</title>
+  <!-- /ROOT_PATH/ is replaced at serve time -->
   <script type="module" crossorigin src="/ROOT_PATH/assets/index.js"></script>
   <link rel="stylesheet" crossorigin href="/ROOT_PATH/assets/index.css">
   <style>
@@ -97,10 +98,14 @@
     const originalPushState = history.pushState.bind(history);
     const originalReplaceState = history.replaceState.bind(history);
 
+    // /ROOT_PATH/ is replaced at serve time
+    const INDEX_ROUTE = "/ROOT_PATH/";
+
     function isIndexRoute() {
-      const segments = window.location.pathname.split("/").filter(Boolean);
-      // ["qag"] => index; ["qag", "<id>"] => a conversation
-      return segments.length <= 1;
+      const base = INDEX_ROUTE.replace(/\/+$/, "");
+      const path = window.location.pathname.replace(/\/+$/, "");
+      const rest = path.startsWith(base) ? path.slice(base.length) : path;
+      return rest.split("/").filter(Boolean).length === 0;
     }
 
     function onNavigate() {

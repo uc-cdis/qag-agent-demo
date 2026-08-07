@@ -81,7 +81,10 @@ def make_agent_app(models, mcp_url, retries, root_path):
         open(rel_dir / "../../static/index_base.html", "r") as f_in,
         open(rel_dir / "../../static/index_v2.html", "w") as f_out,
     ):
-        f_out.write(f_in.read().replace("/ROOT_PATH/", _root_path))
+        temp = f_in.read()
+        temp = temp.replace("/ROOT_PATH/", _root_path)
+        temp = temp.replace("GDC QAG", "GDC QAG v2")
+        f_out.write(temp)
 
     # serve the agent with the built in dev UI
     ui_app = agent.to_web(
