@@ -34,6 +34,9 @@ class ExecutionResult:
     evidence: dict[str, Any] = field(default_factory=dict)
     statuses: dict[str, NodeStatus] = field(default_factory=dict)
     errors: dict[str, BaseException] = field(default_factory=dict)
+    resolved_arguments: dict[str, dict[str, Any]] = field(
+        default_factory=dict
+    )  # added this to track argument resolution from initial LLM scope to actual fields and values
 
 
 # ToolExecutor = Callable[[str, dict[str, Any]], Awaitable[Any]]
@@ -181,6 +184,9 @@ class Executor:
                         resolved_tool_arguments = resolve_evidence_refs(
                             step.tool_arguments, result.evidence
                         )
+                        result.resolved_arguments[step.evidence_id] = (
+                            resolved_tool_arguments
+                        )
                         # execute with pre-existing MCP backend
                         # or execute simple arithmetic tool
                         if step.execution_kind == ExecutionKind.MCP:
@@ -203,6 +209,9 @@ class Executor:
                                 args=resolver_args,
                                 token_usage=token_usage,
                                 model=model,
+                            )
+                            result.resolved_arguments[step.evidence_id] = (
+                                resolver_output
                             )
                             output = await mcp_backend.call_tool(
                                 tool_name=step.tool_name,

@@ -19,6 +19,10 @@ RULES:
 """
 
 
+def _format_markdown(item) -> str:
+    return f"{item["evidence_id"]}: {item["evidence"]}"
+
+
 class Solver:
     def __init__(self) -> None:
         self.agent = Agent(
@@ -84,5 +88,12 @@ class Solver:
         token_usage["output_tokens"] += result.usage.output_tokens
         token_usage["total_tokens"] += result.usage.total_tokens
 
-        print(result.output, file=sys.stderr)
-        return result.output
+        # added generated evidences formatting for better ui rendering
+        prefix = (
+            "**Generated Evidences**"
+            + "\n\n"
+            + "\n".join([f"- {_format_markdown(item)}" for item in history])
+        )
+        # print(prefix + "\n\n" + result.output, file=sys.stderr) uncomment to view answer formatting in cli
+        final_output = prefix + "\n\n" + result.output
+        return final_output

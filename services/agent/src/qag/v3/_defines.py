@@ -26,7 +26,6 @@ SIMPLE_TOOLS = {
     "divide": divide,
 }
 
-
 #####################################
 
 Project = Annotated[

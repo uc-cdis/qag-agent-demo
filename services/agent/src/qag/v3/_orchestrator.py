@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any
 
 from cachetools import TTLCache
+from pydantic import BaseModel
 from pydantic_ai.models import Model
 
 from ._executor import ExecutionResult, Executor, NodeStatus
@@ -306,7 +307,7 @@ class RewooOrchestrator:
                 answer=answer,
                 plan=updated.planner_response,
                 dag=updated.dag,
-                execution=execution_result,
+                execution=updated.execution,
                 token_usage=updated.token_usage,
                 metadata=updated.metadata,
             )
@@ -403,7 +404,7 @@ class RewooOrchestrator:
                 answer=answer,
                 plan=updated.planner_response,
                 dag=updated.dag,
-                execution=execution_result,
+                execution=updated.execution,
                 token_usage=updated.token_usage,
                 metadata=updated.metadata,
             )
