@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic_ai.models import Model
 
 from ._defines import SIMPLE_TOOLS
+from ._events import RewooRunEvents
 from ._mcp_executor import MCPExecutionBackend
 from ._planner import ExecutionKind, PlanDag
 from ._resolver import ConstructCohortFilterArgs, Resolver, StringList
@@ -139,6 +140,7 @@ class Executor:
         *,
         max_concurrency: int = 8,
         model: Model,
+        events: RewooRunEvents | None = None,
     ):
         """executes the rewoo plan using the compiled dag by topological sort execution using an async queue"""
 
@@ -180,6 +182,8 @@ class Executor:
                             continue
                         result.statuses[node] = NodeStatus.RUNNING
                     step = dag.steps[node]
+                    if events:
+                        events.call_started(step.evidence_id, step.tool_name)
                     try:
                         resolved_tool_arguments = resolve_evidence_refs(
                             step.tool_arguments, result.evidence
@@ -190,6 +194,11 @@ class Executor:
                         # execute with pre-existing MCP backend
                         # or execute simple arithmetic tool
                         if step.execution_kind == ExecutionKind.MCP:
+                            if events:
+                                events.call_args(
+                                    step.evidence_id, resolved_tool_arguments
+                                )
+                                events.call_ended(step.evidence_id)
                             if step.executor_name in SIMPLE_TOOLS:
                                 tool_ = SIMPLE_TOOLS[step.executor_name]
                                 args_ = SimpleToolArgs(**resolved_tool_arguments)
@@ -213,17 +222,27 @@ class Executor:
                             result.resolved_arguments[step.evidence_id] = (
                                 resolver_output
                             )
+                            # args only exist after the resolver's own LLM hop, so they
+                            # are emitted here rather than at step start
+                            if events:
+                                events.call_args(step.evidence_id, resolver_output)
+                                events.call_ended(step.evidence_id)
                             output = await mcp_backend.call_tool(
                                 tool_name=step.tool_name,
                                 tool_arguments=resolver_output,
                             )
                     # if execution  of a step FAILS, make sure to block all descendants with lock
                     except Exception as error:
+                        if events:
+                            events.call_failed(step.evidence_id, error)
                         async with lock:
                             result.statuses[node] = NodeStatus.FAILED
                             result.errors[node] = error
                             await block_descendants(node)
                         continue
+
+                    if events:
+                        events.call_result(step.evidence_id, output)  # type: ignore
 
                     # on successful execution and resolution, update the result and reduce in-degree and add new 0 in-degree nodes to exec queue for the next round
                     async with lock:

@@ -7,9 +7,9 @@ from enum import Enum
 from typing import Any
 
 from cachetools import TTLCache
-from pydantic import BaseModel
 from pydantic_ai.models import Model
 
+from ._events import RewooEventSink
 from ._executor import ExecutionResult, Executor, NodeStatus
 from ._mcp_executor import MCPExecutionBackend
 from ._planner import PlanDag, Planner, PlannerResponse
@@ -252,7 +252,12 @@ class RewooOrchestrator:
             metadata=record.metadata,
         )
 
-    async def approve_and_execute(self, run_id: str, model: Model) -> RewooResult:
+    async def approve_and_execute(
+        self,
+        run_id: str,
+        model: Model,
+        events: RewooEventSink | None = None,
+    ) -> RewooResult:
         """execute the rest of the ReWOO workflow after Human In The Loop approval"""
         record = await self.run_store.get(run_id)
         if record.run_status != RunStatus.PLAN_DRAFTED:
@@ -272,6 +277,7 @@ class RewooOrchestrator:
                     max_concurrency=self.config.max_concurrency,
                     token_usage=record.token_usage,
                     model=model,
+                    events=events.bind(run_id) if events else None,
                 )
 
             if self._should_fail_execution(execution_result):
@@ -307,7 +313,7 @@ class RewooOrchestrator:
                 answer=answer,
                 plan=updated.planner_response,
                 dag=updated.dag,
-                execution=updated.execution,
+                execution=updated.execution,  # type: ignore
                 token_usage=updated.token_usage,
                 metadata=updated.metadata,
             )
@@ -404,7 +410,7 @@ class RewooOrchestrator:
                 answer=answer,
                 plan=updated.planner_response,
                 dag=updated.dag,
-                execution=updated.execution,
+                execution=updated.execution,  # type: ignore
                 token_usage=updated.token_usage,
                 metadata=updated.metadata,
             )
