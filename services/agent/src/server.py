@@ -88,6 +88,8 @@ if __name__ == "__main__":
         routes=[
             Mount("/v2", app=v2_app),
             Mount("/v3", app=v3_app),
+            # Mount("/sr-agent", app=sr_agent),
+            # Mount("/sr-mcp", app=sr_mcp),
         ],
     )
     app = Starlette(routes=[Mount(args.root_path, app=inner)])

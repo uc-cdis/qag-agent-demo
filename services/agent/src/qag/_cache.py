@@ -9,9 +9,9 @@ def make_cache_app(cache: TTLCache) -> Starlette:
     async def get_cache_item(request: Request) -> Response:
         payload_id = request.path_params["payload_id"]
         try:
-            payload = JSONResponse(cache[payload_id])
+            payload = cache[payload_id]
             cache[payload_id] = payload  # refresh
-            return payload
+            return JSONResponse(payload)
         except KeyError:
             return JSONResponse({"detail": "Not found"}, status_code=404)
 
