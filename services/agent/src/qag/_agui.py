@@ -13,7 +13,14 @@ async def select_model(request: Request, models: dict):
     except Exception:
         body = {}
 
-    requested_model_alias = body.get("model")
+    # CopilotKit's runtime re-validates the AG-UI body against a fixed nine-field
+    # schema in strip mode, so a top-level `model` never survives the portal's hop.
+    # forwardedProps is the only pass-through slot. Top-level stays for direct callers.
+    forwarded = body.get("forwardedProps")
+    if not isinstance(forwarded, dict):
+        forwarded = {}
+
+    requested_model_alias = forwarded.get("model") or body.get("model")
     selected_model = models.get(requested_model_alias)
 
     if not selected_model and models:
