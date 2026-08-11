@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import os
 
 import uvicorn
@@ -14,6 +15,8 @@ from starlette.routing import Mount
 
 from qag.v2._agent import make_agent_app as make_v2_app  # isort: skip
 from qag.v3._agent import make_agent_app as make_v3_app  # isort: skip
+from sr_agent import make_agent_app as make_sr_app  # isort: skip
+from sr_mcp import mcp as sr_mcp, app as sr_manifest_app  # isort: skip
 
 PROVIDER_MAP: dict[
     str,
@@ -84,13 +87,27 @@ if __name__ == "__main__":
         retries=args.retries,
         root_path=args.root_path + "/v3",
     )
+    sr_app = make_sr_app(
+        models=models,
+        mcp_url=f"http://127.0.0.1:{args.port}{args.root_path}/sr-mcp/mcp",
+        retries=args.retries,
+        root_path=args.root_path + "/sr-chat",
+    )
     inner = Starlette(
         routes=[
             Mount("/v2", app=v2_app),
             Mount("/v3", app=v3_app),
-            # Mount("/sr-agent", app=sr_agent),
-            # Mount("/sr-mcp", app=sr_mcp),
+            Mount("/sr-chat", app=sr_app),
+            Mount("/sr-manifests", app=sr_manifest_app),
+            Mount("/sr-mcp", app=sr_mcp.streamable_http_app()),
         ],
     )
-    app = Starlette(routes=[Mount(args.root_path, app=inner)])
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app: Starlette):
+        # currently, only search and retrieval MCP needs to care about lifespan
+        async with sr_mcp.session_manager.run():
+            yield
+
+    app = Starlette(routes=[Mount(args.root_path, app=inner)], lifespan=lifespan)
     uvicorn.run(app, host="0.0.0.0", port=args.port)
