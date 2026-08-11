@@ -396,7 +396,9 @@ async def get_files(cohort_handle: str, filters: dict) -> str:
     with open(fpath, "w+") as f:
         f.write(data)
     mcp_request = get_http_request()
-    return f"{str(mcp_request.url)[:-8]}-manifests/download/{manifest_handle}.tsv"
+    # TODO figure out how to make dynamic - currently resolves to localhost
+    # return f"{str(mcp_request.url)[:-8]}-manifests/download/{manifest_handle}.tsv"
+    return f"https://m3aicommons.org/qag/sr-manifests/download/{manifest_handle}.tsv"
 
 
 os.makedirs("/tmp/gdc-manifests", exist_ok=True)
