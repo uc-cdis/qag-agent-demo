@@ -377,7 +377,7 @@ async def get_files(cohort_handle: str, filters: dict) -> str:
     Note that filtering on the cohort does not filter the files in the manifest.
     You must filter the files you want included in the manifest separately from the cohort.
     This tool does not execute the data download, it only retrieves a file manifest.
-    The manifest file can be used by the user to download the data directly from the GDC; we recommend using the GDC Data Transfer Tool.
+    The manifest file can be used by the user to download the data directly from the GDC.
     To prevent needless context window consumption, the manifest file is not returned by this tool.
     Instead, this tool returns a URL from which the user can download the manifest file from.
 
@@ -398,7 +398,9 @@ async def get_files(cohort_handle: str, filters: dict) -> str:
     mcp_request = get_http_request()
     # TODO figure out how to make dynamic - currently resolves to localhost
     # return f"{str(mcp_request.url)[:-8]}-manifests/download/{manifest_handle}.tsv"
-    return f"https://m3aicommons.org/qag/sr-manifests/download/{manifest_handle}.tsv"
+    # TODO this hack also is maybe not great
+    commons_url = os.environ.get("COMMONS_URL", "DOMAIN")
+    return f"https://{commons_url}/qag/sr-manifests/download/{manifest_handle}.tsv"
 
 
 os.makedirs("/tmp/gdc-manifests", exist_ok=True)

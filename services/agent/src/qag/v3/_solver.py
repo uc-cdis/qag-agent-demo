@@ -95,5 +95,6 @@ class Solver:
             + "\n".join([f"- {_format_markdown(item)}" for item in history])
         )
         # print(prefix + "\n\n" + result.output, file=sys.stderr) uncomment to view answer formatting in cli
-        final_output = prefix + "\n\n" + result.output
+        # final_output = prefix + "\n\n" + result.output
+        final_output = result.output  # TODO: trying without evidence given tool calls
         return final_output
