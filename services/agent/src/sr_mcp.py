@@ -398,8 +398,8 @@ async def get_files(cohort_handle: str, filters: dict) -> str:
     mcp_request = get_http_request()
     # TODO figure out how to make dynamic - currently resolves to localhost
     # return f"{str(mcp_request.url)[:-8]}-manifests/download/{manifest_handle}.tsv"
-    # TODO this hack also is maybe not great
-    commons_url = os.environ.get("COMMONS_URL", "DOMAIN")
+    # TODO this hack also is maybe not great - edited for desperation
+    commons_url = os.environ.get("COMMONS_URL", "genomicaicommons.org")
     return f"https://{commons_url}/qag/sr-manifests/download/{manifest_handle}.tsv"
 
 
