@@ -1,0 +1,5 @@
+backends:
+  - provider: openai
+    name: openai/gpt-oss-120b
+    alias: (On-Prem) GPT OSS 120B
+    env_prefix: ONPREM_API

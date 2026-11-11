@@ -24,7 +24,7 @@ class PercentageResponse(BaseModel):
     answer: Annotated[
         str,
         Field(
-            description="Percentage answer, specified to 1 decimal place, for example '42.0%'",
+            description="Percentage answer, specified to 2 decimal places, for example '42.00%'",
         ),
     ]
 
@@ -100,6 +100,8 @@ def make_endpoint_app(*, models, agent: Agent):
             "response": result.output,
             "backend": model,
             "steps": extract_steps(result.new_messages()),
+            "input_tokens": result.usage.input_tokens,
+            "output_tokens": result.usage.output_tokens,
         }
         body = to_json(payload, fallback=str)
         return Response(content=body, media_type="application/json")

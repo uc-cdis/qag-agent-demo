@@ -13,6 +13,7 @@ from _tool_var_cnv import make_cnv_tool
 from _tool_var_msi import make_msi_tool
 from _tool_var_ssm import make_ssm_tool
 from _tool_gene_expr import make_gene_expression_tools
+from _tool_survival import make_survival_tool
 # isort: on
 # fmt: on
 
@@ -36,6 +37,7 @@ get_cases_with_available_genomic_data = make_case_availability_tool(
 get_gene_expression_statistics, get_most_variably_expressed_genes = (
     make_gene_expression_tools(cache)
 )
+get_survival_data = make_survival_tool(cache)
 
 
 if __name__ == "__main__":
@@ -88,7 +90,9 @@ if __name__ == "__main__":
 
             - Currently, we support querying case sets by simple somatic mutation, copy number variant, microsatellite instability, and by GDC project.
             - Case counts can be returned for any retrieved or computed case sets.
-            - When a user asks for a statistics of a specific type of data, you must report the metric relative to cases with available data for the given data type. For example, if a user asks for 'prevalence of SSM of gene X', you should report 'cases with SSM in gene X / cases with any SSM'.
+            - For questions involving single molecular alterations, you must report the metric relative to cases with available data for that type of molecular alteration. For example, if a user asks about the frequency of molecular alteration A in gene X, compute: '(cases with alteration A in gene X) / (cases with data available for that type of molecular alteration)'
+            - For questions involving multiple molecular alterations, report metrics relative to the number of cases with available data for the alterations. For example, if a user asks about the frequency of molecular alteration A or alteration B in gene X, compute: '(cases with alteration A or B in gene X) / (cases with data available for alteration A or B or both)'.
+
             """
         ),
         host="0.0.0.0",
@@ -106,5 +110,6 @@ if __name__ == "__main__":
     mcp.add_tool(get_cases_with_available_genomic_data)
     mcp.add_tool(get_gene_expression_statistics)
     mcp.add_tool(get_most_variably_expressed_genes)
+    mcp.add_tool(get_survival_data)
 
     mcp.run(transport=args.transport)
